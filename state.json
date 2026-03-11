@@ -4,14 +4,14 @@
   "last_snapshot": {
     "raas_aas": {
       "server_name": "RAAS/AAS",
-      "online": "0",
+      "online": "160",
       "map_name": "Gorodok AAS v1",
       "map_image_url": ""
     },
     "spec": {
       "server_name": "SPEC",
-      "online": "",
-      "map_name": "",
+      "online": "3",
+      "map_name": "Harju AAS v1",
       "map_image_url": ""
     }
   }

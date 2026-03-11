@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import logging
 import re
+from urllib.parse import urljoin
 
 import requests
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 
 from .models import ServerSnapshot, WidgetSnapshot
 
@@ -12,7 +13,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 class SqstatParser:
-    """Parser for breaking.proxy.sqstat.ru HTML widgets."""
+    """Parser for breaking.proxy.sqstat.ru server cards."""
 
     def __init__(self, base_url: str, timeout_seconds: float = 15.0) -> None:
         self.base_url = base_url.rstrip("/")
@@ -61,24 +62,18 @@ class SqstatParser:
 
     def parse(self, html: str) -> WidgetSnapshot:
         soup = BeautifulSoup(html, "html.parser")
-        page_text = soup.get_text("\n", strip=True)
-        compact_text = self._compact_text(page_text)
 
-        LOGGER.info("Fetched HTML preview: %s", self._compact_text(html[:3000]))
+        cards = self._find_server_cards(soup)
+        LOGGER.info("Found %s server cards", len(cards))
 
-        game_lines = self._extract_game_lines(compact_text)
-        LOGGER.info("Found %s parsed game lines", len(game_lines))
-        for idx, line in enumerate(game_lines[:10], start=1):
-            LOGGER.info("Game line %s: %s", idx, line)
+        raas_card = self._find_card_by_title(cards, "RAAS/AAS")
+        spec_card = self._find_card_by_title(cards, "SPEC")
 
-        raas_line = self._find_raas_line(game_lines)
-        spec_line = self._find_spec_line(game_lines)
+        LOGGER.info("Matched RAAS/AAS card: %s", "yes" if raas_card else "no")
+        LOGGER.info("Matched SPEC card: %s", "yes" if spec_card else "no")
 
-        LOGGER.info("Matched RAAS/AAS line: %s", raas_line or "<not found>")
-        LOGGER.info("Matched SPEC line: %s", spec_line or "<not found>")
-
-        raas_snapshot = self._build_snapshot("RAAS/AAS", raas_line)
-        spec_snapshot = self._build_snapshot("SPEC", spec_line)
+        raas_snapshot = self._build_snapshot_from_card("RAAS/AAS", raas_card)
+        spec_snapshot = self._build_snapshot_from_card("SPEC", spec_card)
 
         LOGGER.info(
             "Extracted RAAS/AAS -> online=%r map=%r map_url=%r",
@@ -98,106 +93,82 @@ class SqstatParser:
             spec=spec_snapshot,
         )
 
-    def _extract_game_lines(self, text: str) -> list[str]:
-        if "Игры" in text:
-            text = text.split("Игры", 1)[1]
-        elif "Games" in text:
-            text = text.split("Games", 1)[1]
+    def _find_server_cards(self, soup: BeautifulSoup) -> list[Tag]:
+        cards: list[Tag] = []
 
-        text = self._compact_text(text)
+        for card in soup.select("div.block-box-content"):
+            text = self._compact_text(card.get_text(" ", strip=True)).upper()
 
-        pattern = re.compile(
-            r"([A-Za-z0-9/][A-Za-z0-9\s#()/_\-]*?\b\d{9,10}\b\s*-\s*\b\d{9,10}\b\s+[A-Za-z0-9][A-Za-z0-9\s/_\-]*?\s+\d{1,3}\s+[A-Za-z0-9][A-Za-z0-9\s/_\-]*?\s+\d{1,3})",
-            re.IGNORECASE,
-        )
-
-        matches = []
-        for match in pattern.finditer(text):
-            line = self._compact_text(match.group(1))
-            if len(line) >= 20:
-                matches.append(line)
-
-        return matches
-
-    def _find_raas_line(self, lines: list[str]) -> str:
-        for line in lines:
-            if "RAAS/AAS" in line.upper():
-                return line
-        return ""
-
-    def _find_spec_line(self, lines: list[str]) -> str:
-        # На breaking.proxy.sqstat.ru второй сервер в логах у тебя приходит как
-        # "SEC 26 ... FW/MDC TRAINING ...", а не как literal "SPEC".
-        candidates = []
-
-        for line in lines:
-            upper = line.upper()
-
-            if "RAAS/AAS" in upper:
+            # Карточка сервера обычно содержит "Текущая" и hidden input со значением онлайна.
+            if "ТЕКУЩАЯ" not in text and "CURRENT" not in text:
                 continue
 
-            score = 0
-            if "FW/MDC TRAINING" in upper:
-                score += 10
-            if re.search(r"\bSEC\s*26\b", upper):
-                score += 5
-            if re.search(r"\bSPEC\b", upper):
-                score += 3
+            if not card.select_one('input[type="hidden"][value]'):
+                continue
 
-            if score > 0:
-                candidates.append((score, line))
+            # Нас интересуют только серверные карточки с заголовками режимов.
+            if not any(mode in text for mode in ("RAAS/AAS", "SPEC", "FW/MDC", "FW/MDCC")):
+                continue
 
-        if not candidates:
-            return ""
+            cards.append(card)
 
-        candidates.sort(key=lambda x: x[0], reverse=True)
-        return candidates[0][1]
+        return cards
 
-    def _build_snapshot(self, mode: str, line: str) -> ServerSnapshot:
-        if not line:
-            return ServerSnapshot(server_name=mode)
+    def _find_card_by_title(self, cards: list[Tag], title: str) -> Tag | None:
+        title_upper = title.upper()
+        for card in cards:
+            text = self._compact_text(card.get_text(" ", strip=True)).upper()
+            if title_upper in text:
+                return card
+        return None
 
-        online = self._extract_online_from_line(line)
-        map_name = self._extract_map_from_line(line, mode)
+    def _build_snapshot_from_card(self, server_name: str, card: Tag | None) -> ServerSnapshot:
+        if card is None:
+            return ServerSnapshot(server_name=server_name)
+
+        online = self._extract_online_from_card(card)
+        map_name, map_image_url = self._extract_current_map_from_card(card)
 
         return ServerSnapshot(
-            server_name=mode,
+            server_name=server_name,
             online=online,
             map_name=map_name,
-            map_image_url="",
+            map_image_url=map_image_url,
         )
 
-    def _extract_online_from_line(self, line: str) -> str:
-        m = re.search(
-            r"\b\d{9,10}\b\s*-\s*\b\d{9,10}\b\s+(.+?)\s+(\d{1,3})\s+(.+?)\s+(\d{1,3})\s*$",
-            line,
-            re.IGNORECASE,
-        )
-        if not m:
-            return ""
+    def _extract_online_from_card(self, card: Tag) -> str:
+        hidden = card.select_one('input[type="hidden"][value]')
+        if hidden:
+            value = (hidden.get("value") or "").strip()
+            if value.isdigit():
+                return value
 
-        team1 = int(m.group(2))
-        team2 = int(m.group(4))
-        return str(team1 + team2)
+        # fallback: берём число из tooltip text / текста карточки
+        text = self._compact_text(card.get_text(" ", strip=True))
+        match = re.search(r"\b(\d{1,3})\b", text)
+        return match.group(1) if match else ""
 
-    def _extract_map_from_line(self, line: str, mode: str) -> str:
-        if mode == "RAAS/AAS":
-            parts = re.split(r"\bRAAS/AAS\b", line, maxsplit=1, flags=re.IGNORECASE)
-        else:
-            parts = re.split(r"\bFW/MDC TRAINING\b|\bSPEC\b", line, maxsplit=1, flags=re.IGNORECASE)
+    def _extract_current_map_from_card(self, card: Tag) -> tuple[str, str]:
+        # Сначала пробуем забрать именно картинку текущей карты из левого блока "Текущая"
+        map_img = card.select_one('.col-xs-7 img[data-type="map"]')
 
-        if not parts:
-            return ""
+        # fallback, если вёрстка слегка отличается
+        if map_img is None:
+            map_img = card.select_one('img[data-type="map"]')
 
-        map_name = self._compact_text(parts[0])
+        if map_img is None:
+            return "", ""
 
-        # Убираем служебный префикс SEC 26 у второго сервера
-        map_name = re.sub(r"^\s*SEC\s*\d+\s+", "", map_name, flags=re.IGNORECASE)
+        map_name = (
+            (map_img.get("data-original-title") or "")
+            or (map_img.get("title") or "")
+            or (map_img.get("alt") or "")
+        ).strip()
 
-        # Убираем хвост вида "#1"
-        map_name = re.sub(r"\s+#\d+\s*$", "", map_name).strip()
+        src = (map_img.get("src") or "").strip()
+        map_image_url = urljoin(f"{self.base_url}/", src) if src else ""
 
-        return map_name
+        return map_name, map_image_url
 
     @staticmethod
     def _compact_text(value: str) -> str:
