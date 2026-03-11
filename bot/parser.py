@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from urllib.parse import urljoin
 
 import requests
@@ -22,7 +23,17 @@ class SqstatParser:
         self.timeout_seconds = timeout_seconds
 
     def fetch_html(self) -> str:
-        response = requests.get(self.base_url, timeout=self.timeout_seconds)
+        response = requests.get(
+            self.base_url,
+            timeout=self.timeout_seconds,
+            headers={
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/122.0.0.0 Safari/537.36"
+                )
+            },
+        )
         response.raise_for_status()
         if not response.text.strip():
             raise ValueError("Received empty HTML response")
@@ -30,16 +41,21 @@ class SqstatParser:
 
     def parse(self, html: str) -> WidgetSnapshot:
         soup = BeautifulSoup(html, "html.parser")
+
+        LOGGER.info("Fetched HTML preview: %s", self._compact_text(html[:3000]))
+
         cards = self._find_server_cards(soup)
-        LOGGER.debug("Found %s potential cards", len(cards))
+        LOGGER.info("Found %s potential cards", len(cards))
 
         raas_card = self._find_card_by_title(cards, RAAS_KEYWORDS)
         spec_card = self._find_card_by_title(cards, SPEC_KEYWORDS)
 
         if raas_card is None:
             LOGGER.error("RAAS/AAS card was not found")
+            self._log_candidate_blocks(cards, "RAAS/AAS")
         if spec_card is None:
             LOGGER.error("SPEC card was not found")
+            self._log_candidate_blocks(cards, "SPEC")
 
         return WidgetSnapshot(
             raas_aas=self._extract_server_data("RAAS/AAS", raas_card),
@@ -57,24 +73,45 @@ class SqstatParser:
             ".server",
             "div[class*='server'][class*='card']",
             "div.card",
+            "section",
+            "article",
+            "div",
         ]
+
+        seen: set[int] = set()
+        cards: list[Tag] = []
+
         for selector in selectors:
-            cards = [node for node in soup.select(selector) if isinstance(node, Tag)]
-            if cards:
-                return cards
-        return []
+            for node in soup.select(selector):
+                if not isinstance(node, Tag):
+                    continue
+                text = node.get_text(" ", strip=True)
+                if not text:
+                    continue
+
+                normalized = text.upper()
+                if "RAAS" in normalized or "AAS" in normalized or "SPEC" in normalized:
+                    node_id = id(node)
+                    if node_id not in seen:
+                        seen.add(node_id)
+                        cards.append(node)
+
+        return cards
 
     def _find_card_by_title(self, cards: list[Tag], keywords: tuple[str, ...]) -> Tag | None:
         for card in cards:
             title = self._extract_card_title(card)
-            if not title:
-                continue
             normalized = title.upper()
-            if all(keyword.upper() in normalized for keyword in keywords):
+
+            if any(keyword.upper() in normalized for keyword in keywords):
                 return card
-            # fallback for RAAS/AAS where title can contain either token
-            if keywords == RAAS_KEYWORDS and any(token in normalized for token in ("RAAS", "AAS")):
+
+            full_text = card.get_text(" ", strip=True).upper()
+            if keywords == RAAS_KEYWORDS and ("RAAS" in full_text or "AAS" in full_text):
                 return card
+            if keywords == SPEC_KEYWORDS and "SPEC" in full_text:
+                return card
+
         return None
 
     def _extract_card_title(self, card: Tag) -> str:
@@ -86,6 +123,8 @@ class SqstatParser:
             ".server-title",
             ".card-title",
             "[data-title]",
+            "strong",
+            "b",
         ]
         for selector in title_selectors:
             node = card.select_one(selector)
@@ -93,7 +132,9 @@ class SqstatParser:
                 text = node.get_text(strip=True)
                 if text:
                     return text
-        return card.get_text(" ", strip=True)[:120]
+
+        text = card.get_text(" ", strip=True)
+        return text[:120]
 
     def _extract_server_data(self, default_name: str, card: Tag | None) -> ServerSnapshot:
         if card is None:
@@ -110,33 +151,61 @@ class SqstatParser:
         )
 
     def _extract_online(self, card: Tag) -> str:
-        # Keep selectors local to the current card to avoid global fragile parsing.
         selectors = [
             ".chart [class*='online']",
             ".stats [class*='online']",
             "[class*='player'] [class*='value']",
             "[class*='online']",
             ".chart .value",
+            "[class*='count']",
+            "[class*='stat']",
+            "span",
+            "div",
         ]
 
         for selector in selectors:
-            node = card.select_one(selector)
-            if node:
+            for node in card.select(selector):
                 text = node.get_text(" ", strip=True)
-                if text:
-                    return text
+                if not text:
+                    continue
 
-        # Final fallback: find shortest numeric-like token in card text.
+                match = re.search(r"\b\d+\s*/\s*\d+\b", text)
+                if match:
+                    return match.group(0)
+
+                match = re.search(r"\b\d+\b", text)
+                if match:
+                    return match.group(0)
+
         tokens = [token for token in card.get_text(" ", strip=True).split() if any(ch.isdigit() for ch in token)]
         return min(tokens, key=len) if tokens else ""
 
     def _extract_map(self, card: Tag) -> tuple[str, str]:
-        map_img = card.select_one("img[data-type='map']")
+        map_img = (
+            card.select_one("img[data-type='map']")
+            or card.select_one("img[alt*='map' i]")
+            or card.select_one("img[title*='map' i]")
+            or card.select_one("img")
+        )
+
         if map_img is None:
-            LOGGER.warning("Map image with data-type='map' was not found for card")
+            LOGGER.warning("Map image was not found for card")
             return "", ""
 
-        map_name = (map_img.get("data-original-title") or "").strip()
+        map_name = (
+            (map_img.get("data-original-title") or "").strip()
+            or (map_img.get("alt") or "").strip()
+            or (map_img.get("title") or "").strip()
+        )
         src = (map_img.get("src") or "").strip()
         map_image_url = urljoin(f"{self.base_url}/", src) if src else ""
         return map_name, map_image_url
+
+    def _log_candidate_blocks(self, cards: list[Tag], label: str) -> None:
+        for index, card in enumerate(cards[:10], start=1):
+            preview = self._compact_text(card.get_text(" ", strip=True)[:300])
+            LOGGER.info("Candidate %s card %s: %s", label, index, preview)
+
+    @staticmethod
+    def _compact_text(value: str) -> str:
+        return " ".join(value.split())
