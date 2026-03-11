@@ -26,3 +26,5 @@ Thumbs.db
 
 # cache
 .cache/
+
+config.json
