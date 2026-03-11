@@ -141,7 +141,6 @@ class SqstatParser:
         for box in soup.select("div.block-box"):
             text = self._compact_text(box.get_text(" ", strip=True)).upper()
 
-            # серверные карточки содержат карту и блок "Текущая"
             if "ТЕКУЩАЯ" not in text and "CURRENT" not in text:
                 continue
 
@@ -163,19 +162,17 @@ class SqstatParser:
         return None
 
     def _build_snapshot_from_card(
-        self,
-        server_name: str,
-        card: Tag | None,
+            self,
+            server_name: str,
+            card: Tag | None,
     ) -> ServerSnapshot:
         if card is None:
             return ServerSnapshot(server_name=server_name)
 
-        content = card.select_one("div.block-box-content")
-        if content is None:
-            return ServerSnapshot(server_name=server_name)
+        content = card.select_one("div.block-box-content") or card
 
-        online = self._extract_online_from_card(content)
-        map_name, map_image_url = self._extract_current_map_from_card(content)
+        online = self._extract_online_from_card(content, server_name)
+        map_name, map_image_url = self._extract_current_map_from_card(content, server_name)
 
         return ServerSnapshot(
             server_name=server_name,
@@ -184,37 +181,101 @@ class SqstatParser:
             map_image_url=map_image_url,
         )
 
-    def _extract_online_from_card(self, card: Tag) -> str:
-        hidden = card.select_one('input[type="hidden"][value]')
-        if hidden:
-            value = (hidden.get("value") or "").strip()
-            if value.isdigit():
+    def _extract_online_from_card(self, card: Tag, server_name: str = "") -> str:
+        # 1) прямые атрибуты value/data-value/aria-valuenow
+        attr_candidates = [
+            ('input[type="hidden"]', "value"),
+            ('input[value]', "value"),
+            ('[data-value]', "data-value"),
+            ('[aria-valuenow]', "aria-valuenow"),
+            ('[value]', "value"),
+        ]
+
+        for selector, attr_name in attr_candidates:
+            for node in card.select(selector):
+                value = (node.get(attr_name) or "").strip()
+                if value.isdigit():
+                    LOGGER.info("%s online from %s[%s]=%s", server_name, selector, attr_name, value)
+                    return value
+
+        card_html = str(card)
+
+        # 2) regex по html карточки
+        regexes = [
+            r'type=["\\\']hidden["\\\'][^>]*value=["\\\'](\d{1,3})["\\\']',
+            r'aria-valuenow=["\\\'](\d{1,3})["\\\']',
+            r'data-value=["\\\'](\d{1,3})["\\\']',
+            r'"value"\s*:\s*"?(\\d{1,3})"?',
+            r"'value'\s*:\s*'?(\\d{1,3})'?",
+            r'"players"\s*:\s*"?(\\d{1,3})"?',
+            r'"online"\s*:\s*"?(\\d{1,3})"?',
+            r"'players'\s*:\s*'?(\\d{1,3})'?",
+            r"'online'\s*:\s*'?(\\d{1,3})'?",
+        ]
+
+        for pattern in regexes:
+            match = re.search(pattern, card_html, re.IGNORECASE)
+            if match:
+                value = match.group(1).strip()
+                LOGGER.info("%s online from regex %s => %s", server_name, pattern, value)
                 return value
 
-        # fallback: если value не нашли, пробуем взять первое число из текста карточки
+        # 3) крайний fallback: число из текста карточки
         text = self._compact_text(card.get_text(" ", strip=True))
-        match = re.search(r"\b(\d{1,3})\b", text)
-        return match.group(1) if match else ""
+        text_match = re.search(r"\b(\d{1,3})\b", text)
+        if text_match:
+            value = text_match.group(1)
+            LOGGER.info("%s online from text fallback => %s", server_name, value)
+            return value
 
-    def _extract_current_map_from_card(self, card: Tag) -> tuple[str, str]:
-        # На скрине текущая карта лежит в левом блоке .col-xs-7
-        map_img = card.select_one('.col-xs-7 img[data-type="map"]')
+        # 4) дамп карточки для дебага
+        debug_name = server_name.lower().replace("/", "_").replace(" ", "_") or "unknown"
+        with open(f"debug_card_{debug_name}.html", "w", encoding="utf-8") as f:
+            f.write(card.prettify())
 
-        # fallback на случай изменения вёрстки
+        LOGGER.warning("%s online not found, dumped HTML to debug_card_%s.html", server_name, debug_name)
+        return ""
+
+    def _extract_current_map_from_card(
+            self,
+            card: Tag,
+            server_name: str = "",
+    ) -> tuple[str, str]:
+        map_img = card.select_one('img[data-type="map"]')
+
         if map_img is None:
-            map_img = card.select_one('img[data-type="map"]')
+            map_img = card.select_one('img[src*="/maps/"], img[data-src*="/maps/"], img[data-original*="/maps/"]')
 
         if map_img is None:
+            debug_name = server_name.lower().replace("/", "_").replace(" ", "_") or "unknown"
+            with open(f"debug_card_{debug_name}.html", "w", encoding="utf-8") as f:
+                f.write(card.prettify())
+            LOGGER.warning("%s map image not found, dumped HTML to debug_card_%s.html", server_name, debug_name)
             return "", ""
 
         map_name = (
-            (map_img.get("data-original-title") or "")
-            or (map_img.get("title") or "")
-            or (map_img.get("alt") or "")
+                (map_img.get("data-original-title") or "")
+                or (map_img.get("title") or "")
+                or (map_img.get("alt") or "")
+                or (map_img.get("data-title") or "")
+                or (map_img.get("data-name") or "")
         ).strip()
 
-        src = (map_img.get("src") or "").strip()
+        src = (
+                (map_img.get("src") or "")
+                or (map_img.get("data-src") or "")
+                or (map_img.get("data-original") or "")
+        ).strip()
+
         map_image_url = urljoin(f"{self.base_url}/", src) if src else ""
+
+        LOGGER.info(
+            "%s map extracted -> name=%r src=%r resolved=%r",
+            server_name,
+            map_name,
+            src,
+            map_image_url,
+        )
 
         return map_name, map_image_url
 
