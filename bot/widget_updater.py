@@ -62,7 +62,7 @@ class WidgetUpdater:
 
     async def update_once(self) -> None:
         try:
-            snapshot = self.parser.fetch_and_parse()
+            snapshot = await self.parser.fetch_and_parse()
         except Exception:
             LOGGER.exception("Failed to fetch/parse HTML")
             return

@@ -4,8 +4,8 @@ import logging
 import re
 from urllib.parse import urljoin
 
-import requests
-from bs4 import BeautifulSoup, Tag
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+from playwright.async_api import async_playwright
 
 from .models import ServerSnapshot, WidgetSnapshot
 
@@ -13,121 +13,124 @@ LOGGER = logging.getLogger(__name__)
 
 
 class SqstatParser:
-    """Parser for breaking.proxy.sqstat.ru server cards."""
+    """Parser for breaking.proxy.sqstat.ru via rendered DOM (Playwright Async API)."""
 
-    def __init__(self, base_url: str, timeout_seconds: float = 15.0) -> None:
+    def __init__(self, base_url: str, timeout_seconds: float = 20.0) -> None:
         self.base_url = base_url.rstrip("/")
         self.timeout_seconds = timeout_seconds
 
-    def fetch_html(self) -> str:
-        session = requests.Session()
-        headers = {
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/122.0.0.0 Safari/537.36"
+    async def fetch_and_parse(self) -> WidgetSnapshot:
+        cards = await self._fetch_cards()
+        return self._build_snapshot(cards)
+
+    async def _fetch_cards(self) -> list[dict[str, str]]:
+        timeout_ms = int(self.timeout_seconds * 1000)
+
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            page = await browser.new_page(viewport={"width": 1600, "height": 1200})
+
+            try:
+                await page.goto(self.base_url, wait_until="domcontentloaded", timeout=timeout_ms)
+
+                try:
+                    await page.wait_for_load_state("networkidle", timeout=timeout_ms)
+                except PlaywrightTimeoutError:
+                    LOGGER.warning("networkidle timeout; continuing with current DOM")
+
+                try:
+                    await page.wait_for_selector("div.block-box", timeout=timeout_ms)
+                except PlaywrightTimeoutError:
+                    LOGGER.warning("div.block-box not found before timeout")
+
+                await page.wait_for_timeout(2500)
+
+                raw_cards: list[dict[str, str]] = await page.locator("div.block-box").evaluate_all(
+                    """
+                    (els) => els.map((el, idx) => {
+                        const text = (el.innerText || "")
+                            .replace(/\\s+/g, " ")
+                            .trim();
+
+                        const html = el.outerHTML || "";
+
+                        const mapImg =
+                            el.querySelector('img[data-type="map"]') ||
+                            el.querySelector('img[src*="/maps/"]') ||
+                            el.querySelector('img[data-src*="/maps/"]') ||
+                            el.querySelector('img[data-original*="/maps/"]');
+
+                        const mapName = (
+                            mapImg?.getAttribute("data-original-title") ||
+                            mapImg?.getAttribute("title") ||
+                            mapImg?.getAttribute("alt") ||
+                            mapImg?.getAttribute("data-title") ||
+                            mapImg?.getAttribute("data-name") ||
+                            ""
+                        ).trim();
+
+                        const mapSrc = (
+                            mapImg?.getAttribute("src") ||
+                            mapImg?.getAttribute("data-src") ||
+                            mapImg?.getAttribute("data-original") ||
+                            ""
+                        ).trim();
+
+                        return {
+                            index: String(idx),
+                            text,
+                            html,
+                            map_name: mapName,
+                            map_src: mapSrc,
+                        };
+                    })
+                    """
+                )
+            finally:
+                await browser.close()
+
+        cards: list[dict[str, str]] = []
+        for card in raw_cards:
+            text_upper = (card.get("text") or "").upper()
+            html = card.get("html") or ""
+            has_current = "ТЕКУЩАЯ" in text_upper or "CURRENT" in text_upper
+            has_map = (
+                'data-type="map"' in html
+                or "/assets/img/maps/" in html
+                or bool(card.get("map_src"))
             )
-        }
 
-        response = session.get(
-            self.base_url,
-            timeout=self.timeout_seconds,
-            headers=headers,
-        )
-        response.raise_for_status()
+            if has_current and has_map:
+                cards.append(card)
 
-        html = response.text
-        if not html.strip():
-            raise ValueError("Received empty HTML response")
-
-        cookie_match = re.search(
-            r"document\.cookie\s*=\s*'([^=]+)=([^;]+);",
-            html,
-            re.IGNORECASE,
-        )
-
-        if cookie_match:
-            cookie_name = cookie_match.group(1).strip()
-            cookie_value = cookie_match.group(2).strip()
-            LOGGER.info("Received JS cookie challenge: %s", cookie_name)
-
-            session.cookies.set(cookie_name, cookie_value)
-            response = session.get(
-                self.base_url,
-                timeout=self.timeout_seconds,
-                headers=headers,
-            )
-            response.raise_for_status()
-            html = response.text
-
-        if not html.strip():
-            raise ValueError("Received empty HTML response after cookie challenge")
-
-        return html
-
-    def fetch_and_parse(self) -> WidgetSnapshot:
-        return self.parse(self.fetch_html())
-
-    def parse(self, html: str) -> WidgetSnapshot:
-        LOGGER.info("HTML length: %s", len(html))
-        LOGGER.info("Has RAAS/AAS in raw html: %s", "RAAS/AAS" in html)
-        LOGGER.info("Has SPEC in raw html: %s", "SPEC" in html)
-        LOGGER.info("Has FW/MDC in raw html: %s", "FW/MDC" in html)
-        LOGGER.info("Has block-box in raw html: %s", "block-box" in html)
-        LOGGER.info("Has block-box-content in raw html: %s", "block-box-content" in html)
-        LOGGER.info("Has data-type=\"map\" in raw html: %s", 'data-type="map"' in html)
-        LOGGER.info("Has hidden input in raw html: %s", 'type="hidden"' in html)
-        LOGGER.info("Has Текущая in raw html: %s", "Текущая" in html)
-
-        with open("debug_breaking.html", "w", encoding="utf-8") as f:
-            f.write(html)
-
-        soup = BeautifulSoup(html, "html.parser")
-
-        LOGGER.info("BeautifulSoup div.block-box count: %s", len(soup.select("div.block-box")))
-        LOGGER.info(
-            "BeautifulSoup div.block-box-content count: %s",
-            len(soup.select("div.block-box-content")),
-        )
-        LOGGER.info(
-            "BeautifulSoup map images count: %s",
-            len(soup.select('img[data-type="map"]')),
-        )
-
-        cards = self._find_server_cards(soup)
         LOGGER.info("Found %s server cards", len(cards))
-
         for idx, card in enumerate(cards, start=1):
-            preview = self._compact_text(card.get_text(" ", strip=True))
-            LOGGER.info("Card %s preview: %s", idx, preview[:300])
+            LOGGER.info("Card %s preview: %s", idx, (card.get("text") or "")[:300])
 
-        raas_card = self._find_card_by_title(cards, "RAAS/AAS")
-        spec_card = self._find_card_by_title(cards, "SPEC")
+        return cards
 
-        # fallback по порядку на странице
-        if raas_card is None and len(cards) >= 1:
-            raas_card = cards[0]
-
-        if spec_card is None and len(cards) >= 2:
-            spec_card = cards[1]
+    def _build_snapshot(self, cards: list[dict[str, str]]) -> WidgetSnapshot:
+        # По твоим скринам и логам:
+        # 1-я карточка = RAAS/AAS
+        # 2-я карточка = SPEC
+        raas_card = cards[0] if len(cards) >= 1 else None
+        spec_card = cards[1] if len(cards) >= 2 else None
 
         LOGGER.info("Matched RAAS/AAS card: %s", "yes" if raas_card else "no")
         LOGGER.info("Matched SPEC card: %s", "yes" if spec_card else "no")
 
-        raas_snapshot = self._build_snapshot_from_card("RAAS/AAS", raas_card)
-        spec_snapshot = self._build_snapshot_from_card("SPEC", spec_card)
+        raas_snapshot = self._snapshot_from_card("RAAS/AAS", raas_card)
+        spec_snapshot = self._snapshot_from_card("SPEC", spec_card)
 
         LOGGER.info(
-            "Extracted RAAS/AAS -> online=%r map=%r map_url=%r",
+            "Extracted RAAS/AAS -> online=%r map=%r",
             raas_snapshot.online,
             raas_snapshot.map_name,
-            raas_snapshot.map_image_url,
         )
         LOGGER.info(
-            "Extracted SPEC -> online=%r map=%r map_url=%r",
+            "Extracted SPEC -> online=%r map=%r",
             spec_snapshot.online,
             spec_snapshot.map_name,
-            spec_snapshot.map_image_url,
         )
 
         return WidgetSnapshot(
@@ -135,150 +138,109 @@ class SqstatParser:
             spec=spec_snapshot,
         )
 
-    def _find_server_cards(self, soup: BeautifulSoup) -> list[Tag]:
-        cards: list[Tag] = []
-
-        for box in soup.select("div.block-box"):
-            text = self._compact_text(box.get_text(" ", strip=True)).upper()
-
-            if "ТЕКУЩАЯ" not in text and "CURRENT" not in text:
-                continue
-
-            if box.select_one('img[data-type="map"]') is None:
-                continue
-
-            cards.append(box)
-
-        return cards
-
-    def _find_card_by_title(self, cards: list[Tag], title: str) -> Tag | None:
-        title_upper = title.upper()
-
-        for card in cards:
-            text = self._compact_text(card.get_text(" ", strip=True)).upper()
-            if title_upper in text:
-                return card
-
-        return None
-
-    def _build_snapshot_from_card(
-            self,
-            server_name: str,
-            card: Tag | None,
+    def _snapshot_from_card(
+        self,
+        server_name: str,
+        card: dict[str, str] | None,
     ) -> ServerSnapshot:
-        if card is None:
+        if not card:
             return ServerSnapshot(server_name=server_name)
 
-        content = card.select_one("div.block-box-content") or card
+        html = card.get("html") or ""
+        text = card.get("text") or ""
 
-        online = self._extract_online_from_card(content, server_name)
-        map_name, map_image_url = self._extract_current_map_from_card(content, server_name)
+        online = self._extract_online(html, text, server_name)
+        map_name = self._extract_map_name(card, server_name)
 
         return ServerSnapshot(
             server_name=server_name,
             online=online,
             map_name=map_name,
-            map_image_url=map_image_url,
+            map_image_url="",
         )
 
-    def _extract_online_from_card(self, card: Tag, server_name: str = "") -> str:
-        # 1) прямые атрибуты value/data-value/aria-valuenow
-        attr_candidates = [
-            ('input[type="hidden"]', "value"),
-            ('input[value]', "value"),
-            ('[data-value]', "data-value"),
-            ('[aria-valuenow]', "aria-valuenow"),
-            ('[value]', "value"),
-        ]
-
-        for selector, attr_name in attr_candidates:
-            for node in card.select(selector):
-                value = (node.get(attr_name) or "").strip()
-                if value.isdigit():
-                    LOGGER.info("%s online from %s[%s]=%s", server_name, selector, attr_name, value)
-                    return value
-
-        card_html = str(card)
-
-        # 2) regex по html карточки
-        regexes = [
-            r'type=["\\\']hidden["\\\'][^>]*value=["\\\'](\d{1,3})["\\\']',
-            r'aria-valuenow=["\\\'](\d{1,3})["\\\']',
-            r'data-value=["\\\'](\d{1,3})["\\\']',
-            r'"value"\s*:\s*"?(\\d{1,3})"?',
-            r"'value'\s*:\s*'?(\\d{1,3})'?",
-            r'"players"\s*:\s*"?(\\d{1,3})"?',
+    def _extract_online(self, html: str, text: str, server_name: str) -> str:
+        patterns = [
+            r'type=["\']hidden["\'][^>]*value=["\'](\d{1,3})["\']',
+            r'aria-valuenow=["\'](\d{1,3})["\']',
+            r'data-value=["\'](\d{1,3})["\']',
+            r'data-percent=["\'](\d{1,3})["\']',
             r'"online"\s*:\s*"?(\\d{1,3})"?',
-            r"'players'\s*:\s*'?(\\d{1,3})'?",
+            r'"players"\s*:\s*"?(\\d{1,3})"?',
+            r'"value"\s*:\s*"?(\\d{1,3})"?',
             r"'online'\s*:\s*'?(\\d{1,3})'?",
+            r"'players'\s*:\s*'?(\\d{1,3})'?",
+            r"'value'\s*:\s*'?(\\d{1,3})'?",
         ]
 
-        for pattern in regexes:
-            match = re.search(pattern, card_html, re.IGNORECASE)
-            if match:
-                value = match.group(1).strip()
+        for pattern in patterns:
+            m = re.search(pattern, html, re.IGNORECASE)
+            if m:
+                value = m.group(1)
                 LOGGER.info("%s online from regex %s => %s", server_name, pattern, value)
                 return value
 
-        # 3) крайний fallback: число из текста карточки
-        text = self._compact_text(card.get_text(" ", strip=True))
-        text_match = re.search(r"\b(\d{1,3})\b", text)
-        if text_match:
-            value = text_match.group(1)
-            LOGGER.info("%s online from text fallback => %s", server_name, value)
-            return value
+        # fallback: берем первое небольшое число из текста
+        nums = re.findall(r"\b\d{1,3}\b", text)
+        for num in nums:
+            if num.isdigit():
+                LOGGER.info("%s online from text fallback => %s", server_name, num)
+                return num
 
-        # 4) дамп карточки для дебага
-        debug_name = server_name.lower().replace("/", "_").replace(" ", "_") or "unknown"
-        with open(f"debug_card_{debug_name}.html", "w", encoding="utf-8") as f:
-            f.write(card.prettify())
-
-        LOGGER.warning("%s online not found, dumped HTML to debug_card_%s.html", server_name, debug_name)
+        LOGGER.warning("%s online not found", server_name)
         return ""
 
-    def _extract_current_map_from_card(
-            self,
-            card: Tag,
-            server_name: str = "",
-    ) -> tuple[str, str]:
-        map_img = card.select_one('img[data-type="map"]')
+    def _extract_map_name(self, card: dict[str, str], server_name: str) -> str:
+        map_name = (card.get("map_name") or "").strip()
+        if map_name:
+            LOGGER.info("%s map from attr => %s", server_name, map_name)
+            return map_name
 
-        if map_img is None:
-            map_img = card.select_one('img[src*="/maps/"], img[data-src*="/maps/"], img[data-original*="/maps/"]')
+        map_src = (card.get("map_src") or "").strip()
+        inferred = self._infer_map_name_from_src(map_src)
+        if inferred:
+            LOGGER.info("%s map inferred from src => %s", server_name, inferred)
+            return inferred
 
-        if map_img is None:
-            debug_name = server_name.lower().replace("/", "_").replace(" ", "_") or "unknown"
-            with open(f"debug_card_{debug_name}.html", "w", encoding="utf-8") as f:
-                f.write(card.prettify())
-            LOGGER.warning("%s map image not found, dumped HTML to debug_card_%s.html", server_name, debug_name)
-            return "", ""
-
-        map_name = (
-                (map_img.get("data-original-title") or "")
-                or (map_img.get("title") or "")
-                or (map_img.get("alt") or "")
-                or (map_img.get("data-title") or "")
-                or (map_img.get("data-name") or "")
-        ).strip()
-
-        src = (
-                (map_img.get("src") or "")
-                or (map_img.get("data-src") or "")
-                or (map_img.get("data-original") or "")
-        ).strip()
-
-        map_image_url = urljoin(f"{self.base_url}/", src) if src else ""
-
-        LOGGER.info(
-            "%s map extracted -> name=%r src=%r resolved=%r",
-            server_name,
-            map_name,
-            src,
-            map_image_url,
+        html = card.get("html") or ""
+        m = re.search(
+            r'/assets/img/maps/([a-z0-9_\-]+)\.(?:jpg|jpeg|png|webp)',
+            html,
+            re.IGNORECASE,
         )
+        if m:
+            inferred = self._infer_map_name_from_src(m.group(1))
+            if inferred:
+                LOGGER.info("%s map inferred from html => %s", server_name, inferred)
+                return inferred
 
-        return map_name, map_image_url
+        LOGGER.warning("%s map not found", server_name)
+        return ""
 
-    @staticmethod
-    def _compact_text(value: str) -> str:
-        return " ".join(value.split())
+    def _infer_map_name_from_src(self, src: str) -> str:
+        if not src:
+            return ""
+
+        src = urljoin(f"{self.base_url}/", src)
+        slug = src.rstrip("/").split("/")[-1]
+        slug = re.sub(r"\.(jpg|jpeg|png|webp)$", "", slug, flags=re.IGNORECASE)
+        slug = slug.replace("-", "_").strip("_")
+
+        if not slug:
+            return ""
+
+        parts = [p for p in slug.split("_") if p]
+        pretty_parts: list[str] = []
+
+        for part in parts:
+            low = part.lower()
+            if re.fullmatch(r"v\d+", low):
+                pretty_parts.append(low)
+            elif low in {"aas", "raas", "tc"}:
+                pretty_parts.append(low.upper())
+            elif low in {"invasion", "seed", "insurgency", "skirmish"}:
+                pretty_parts.append(low.capitalize())
+            else:
+                pretty_parts.append(low.capitalize())
+
+        return " ".join(pretty_parts)
