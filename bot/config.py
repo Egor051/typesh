@@ -71,8 +71,8 @@ def load_settings() -> Settings:
     except ValueError as exc:
         raise ConfigError("UPDATE_INTERVAL_SECONDS must be an integer") from exc
 
-    if interval < 30:
-        raise ConfigError("UPDATE_INTERVAL_SECONDS must be at least 30 seconds")
+    if interval < 5:
+        raise ConfigError("UPDATE_INTERVAL_SECONDS must be at least 5 seconds")
 
     return Settings(
         discord_token=token,

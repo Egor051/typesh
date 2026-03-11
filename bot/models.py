@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from datetime import datetime
 from typing import Any
 
 
@@ -19,11 +20,17 @@ class ServerSnapshot:
 class WidgetSnapshot:
     raas_aas: ServerSnapshot
     spec: ServerSnapshot
+    last_successful_request_at: datetime | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "raas_aas": self.raas_aas.to_dict(),
             "spec": self.spec.to_dict(),
+            "last_successful_request_at": (
+                self.last_successful_request_at.isoformat()
+                if self.last_successful_request_at
+                else None
+            ),
         }
 
     def is_empty(self) -> bool:
