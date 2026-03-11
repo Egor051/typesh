@@ -69,20 +69,46 @@ class SqstatParser:
         return self.parse(self.fetch_html())
 
     def parse(self, html: str) -> WidgetSnapshot:
+        LOGGER.info("HTML length: %s", len(html))
+        LOGGER.info("Has RAAS/AAS in raw html: %s", "RAAS/AAS" in html)
+        LOGGER.info("Has SPEC in raw html: %s", "SPEC" in html)
+        LOGGER.info("Has FW/MDC in raw html: %s", "FW/MDC" in html)
+        LOGGER.info("Has block-box in raw html: %s", "block-box" in html)
+        LOGGER.info("Has block-box-content in raw html: %s", "block-box-content" in html)
+        LOGGER.info("Has data-type=\"map\" in raw html: %s", 'data-type="map"' in html)
+        LOGGER.info("Has hidden input in raw html: %s", 'type="hidden"' in html)
+        LOGGER.info("Has Текущая in raw html: %s", "Текущая" in html)
+
+        with open("debug_breaking.html", "w", encoding="utf-8") as f:
+            f.write(html)
+
         soup = BeautifulSoup(html, "html.parser")
+
+        LOGGER.info("BeautifulSoup div.block-box count: %s", len(soup.select("div.block-box")))
+        LOGGER.info(
+            "BeautifulSoup div.block-box-content count: %s",
+            len(soup.select("div.block-box-content")),
+        )
+        LOGGER.info(
+            "BeautifulSoup hidden inputs count: %s",
+            len(soup.select('input[type="hidden"][value]')),
+        )
+        LOGGER.info(
+            "BeautifulSoup map images count: %s",
+            len(soup.select('img[data-type="map"]')),
+        )
 
         cards = self._find_server_cards(soup)
         LOGGER.info("Found %s server cards", len(cards))
 
         for idx, card in enumerate(cards, start=1):
             preview = self._compact_text(card.get_text(" ", strip=True))
-            LOGGER.info("Card %s preview: %s", idx, preview[:200])
+            LOGGER.info("Card %s preview: %s", idx, preview[:300])
 
         raas_card = self._find_card_by_title(cards, "RAAS/AAS")
         spec_card = self._find_card_by_title(cards, "SPEC")
 
-        # fallback по порядку карточек на странице:
-        # 1-я обычно RAAS/AAS, 2-я обычно SPEC
+        # fallback по порядку карточек на странице
         if raas_card is None and len(cards) >= 1:
             raas_card = cards[0]
 
