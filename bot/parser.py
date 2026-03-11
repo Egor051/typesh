@@ -29,7 +29,11 @@ class SqstatParser:
             )
         }
 
-        response = session.get(self.base_url, timeout=self.timeout_seconds, headers=headers)
+        response = session.get(
+            self.base_url,
+            timeout=self.timeout_seconds,
+            headers=headers,
+        )
         response.raise_for_status()
 
         html = response.text
@@ -48,7 +52,11 @@ class SqstatParser:
             LOGGER.info("Received JS cookie challenge: %s", cookie_name)
 
             session.cookies.set(cookie_name, cookie_value)
-            response = session.get(self.base_url, timeout=self.timeout_seconds, headers=headers)
+            response = session.get(
+                self.base_url,
+                timeout=self.timeout_seconds,
+                headers=headers,
+            )
             response.raise_for_status()
             html = response.text
 
@@ -66,8 +74,20 @@ class SqstatParser:
         cards = self._find_server_cards(soup)
         LOGGER.info("Found %s server cards", len(cards))
 
+        for idx, card in enumerate(cards, start=1):
+            preview = self._compact_text(card.get_text(" ", strip=True))
+            LOGGER.info("Card %s preview: %s", idx, preview[:200])
+
         raas_card = self._find_card_by_title(cards, "RAAS/AAS")
         spec_card = self._find_card_by_title(cards, "SPEC")
+
+        # fallback по порядку карточек на странице:
+        # 1-я обычно RAAS/AAS, 2-я обычно SPEC
+        if raas_card is None and len(cards) >= 1:
+            raas_card = cards[0]
+
+        if spec_card is None and len(cards) >= 2:
+            spec_card = cards[1]
 
         LOGGER.info("Matched RAAS/AAS card: %s", "yes" if raas_card else "no")
         LOGGER.info("Matched SPEC card: %s", "yes" if spec_card else "no")
@@ -96,38 +116,49 @@ class SqstatParser:
     def _find_server_cards(self, soup: BeautifulSoup) -> list[Tag]:
         cards: list[Tag] = []
 
-        for card in soup.select("div.block-box-content"):
-            text = self._compact_text(card.get_text(" ", strip=True)).upper()
+        for box in soup.select("div.block-box"):
+            text = self._compact_text(box.get_text(" ", strip=True)).upper()
 
-            # Карточка сервера обычно содержит "Текущая" и hidden input со значением онлайна.
+            # Отбираем именно карточки серверов, у которых есть блок "Текущая"
             if "ТЕКУЩАЯ" not in text and "CURRENT" not in text:
                 continue
 
-            if not card.select_one('input[type="hidden"][value]'):
+            content = box.select_one("div.block-box-content")
+            if content is None:
                 continue
 
-            # Нас интересуют только серверные карточки с заголовками режимов.
-            if not any(mode in text for mode in ("RAAS/AAS", "SPEC", "FW/MDC", "FW/MDCC")):
+            # Онлайн на странице хранится в hidden input value="..."
+            if not content.select_one('input[type="hidden"][value]'):
                 continue
 
-            cards.append(card)
+            cards.append(box)
 
         return cards
 
     def _find_card_by_title(self, cards: list[Tag], title: str) -> Tag | None:
         title_upper = title.upper()
+
         for card in cards:
             text = self._compact_text(card.get_text(" ", strip=True)).upper()
             if title_upper in text:
                 return card
+
         return None
 
-    def _build_snapshot_from_card(self, server_name: str, card: Tag | None) -> ServerSnapshot:
+    def _build_snapshot_from_card(
+        self,
+        server_name: str,
+        card: Tag | None,
+    ) -> ServerSnapshot:
         if card is None:
             return ServerSnapshot(server_name=server_name)
 
-        online = self._extract_online_from_card(card)
-        map_name, map_image_url = self._extract_current_map_from_card(card)
+        content = card.select_one("div.block-box-content")
+        if content is None:
+            return ServerSnapshot(server_name=server_name)
+
+        online = self._extract_online_from_card(content)
+        map_name, map_image_url = self._extract_current_map_from_card(content)
 
         return ServerSnapshot(
             server_name=server_name,
@@ -143,16 +174,16 @@ class SqstatParser:
             if value.isdigit():
                 return value
 
-        # fallback: берём число из tooltip text / текста карточки
+        # fallback: если value не нашли, пробуем взять первое число из текста карточки
         text = self._compact_text(card.get_text(" ", strip=True))
         match = re.search(r"\b(\d{1,3})\b", text)
         return match.group(1) if match else ""
 
     def _extract_current_map_from_card(self, card: Tag) -> tuple[str, str]:
-        # Сначала пробуем забрать именно картинку текущей карты из левого блока "Текущая"
+        # На скрине текущая карта лежит в левом блоке .col-xs-7
         map_img = card.select_one('.col-xs-7 img[data-type="map"]')
 
-        # fallback, если вёрстка слегка отличается
+        # fallback на случай изменения вёрстки
         if map_img is None:
             map_img = card.select_one('img[data-type="map"]')
 
