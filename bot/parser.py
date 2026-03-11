@@ -61,12 +61,18 @@ class SqstatParser:
 
     def parse(self, html: str) -> WidgetSnapshot:
         soup = BeautifulSoup(html, "html.parser")
-        text = self._compact_text(soup.get_text("\n", strip=True))
+        page_text = soup.get_text("\n", strip=True)
+        compact_text = self._compact_text(page_text)
 
         LOGGER.info("Fetched HTML preview: %s", self._compact_text(html[:3000]))
 
-        raas_line = self._find_mode_line(text, "RAAS/AAS")
-        spec_line = self._find_mode_line(text, "SPEC")
+        game_lines = self._extract_game_lines(compact_text)
+        LOGGER.info("Found %s parsed game lines", len(game_lines))
+        for idx, line in enumerate(game_lines[:5], start=1):
+            LOGGER.info("Game line %s: %s", idx, line)
+
+        raas_line = self._find_line_for_mode(game_lines, "RAAS/AAS")
+        spec_line = self._find_line_for_mode(game_lines, "SPEC")
 
         LOGGER.info("Matched RAAS/AAS line: %s", raas_line or "<not found>")
         LOGGER.info("Matched SPEC line: %s", spec_line or "<not found>")
@@ -92,25 +98,35 @@ class SqstatParser:
             spec=spec_snapshot,
         )
 
-    def _find_mode_line(self, text: str, mode: str) -> str:
-        pattern = None
+    def _extract_game_lines(self, text: str) -> list[str]:
+        if "Игры" in text:
+            text = text.split("Игры", 1)[1]
+        elif "Games" in text:
+            text = text.split("Games", 1)[1]
 
-        if mode == "RAAS/AAS":
-            pattern = re.compile(
-                r"([A-Za-z0-9\s#/_-]+?\bRAAS/AAS\b\s*#?\d*.*?\b\d{9,10}\b\s*-\s*\b\d{9,10}\b.*?(?:\b\d{1,3}\b.*?\b\d{1,3}\b))",
-                re.IGNORECASE,
-            )
-        elif mode == "SPEC":
-            pattern = re.compile(
-                r"([A-Za-z0-9\s#/_-]+?\bSPEC\b.*?\b\d{9,10}\b\s*-\s*\b\d{9,10}\b.*?(?:\b\d{1,3}\b.*?\b\d{1,3}\b))",
-                re.IGNORECASE,
-            )
+        text = self._compact_text(text)
 
-        if pattern is None:
-            return ""
+        pattern = re.compile(
+            r"([A-Za-z0-9/][A-Za-z0-9\s#()/_\-]*?\b\d{9,10}\b\s*-\s*\b\d{9,10}\b\s+[A-Za-z0-9][A-Za-z0-9\s/_\-]*?\s+\d{1,3}\s+[A-Za-z0-9][A-Za-z0-9\s/_\-]*?\s+\d{1,3})",
+            re.IGNORECASE,
+        )
 
-        match = pattern.search(text)
-        return self._compact_text(match.group(1)) if match else ""
+        matches = []
+        for match in pattern.finditer(text):
+            line = self._compact_text(match.group(1))
+            if len(line) >= 20:
+                matches.append(line)
+
+        return matches
+
+    def _find_line_for_mode(self, lines: list[str], mode: str) -> str:
+        for line in lines:
+            upper = line.upper()
+            if mode == "RAAS/AAS" and "RAAS/AAS" in upper:
+                return line
+            if mode == "SPEC" and re.search(r"\bSPEC\b", upper):
+                return line
+        return ""
 
     def _build_snapshot(self, mode: str, line: str) -> ServerSnapshot:
         if not line:
@@ -127,12 +143,12 @@ class SqstatParser:
         )
 
     def _extract_online_from_line(self, line: str) -> str:
-        ts_matches = re.findall(r"\b\d{9,10}\b", line)
-        cleaned = line
-        for ts in ts_matches:
-            cleaned = cleaned.replace(ts, " ")
+        after_time = re.split(r"\b\d{9,10}\b\s*-\s*\b\d{9,10}\b", line, maxsplit=1)
+        if len(after_time) < 2:
+            return ""
 
-        nums = [int(x) for x in re.findall(r"\b\d{1,3}\b", cleaned)]
+        tail = after_time[1]
+        nums = [int(x) for x in re.findall(r"\b\d{1,3}\b", tail)]
         nums = [n for n in nums if 0 <= n <= 127]
 
         if not nums:
@@ -141,17 +157,19 @@ class SqstatParser:
         return str(max(nums))
 
     def _extract_map_from_line(self, line: str, mode: str) -> str:
-        working = line
-
         if mode == "RAAS/AAS":
-            working = re.split(r"\bRAAS/AAS\b", working, maxsplit=1, flags=re.IGNORECASE)[0]
+            parts = re.split(r"\bRAAS/AAS\b", line, maxsplit=1, flags=re.IGNORECASE)
         else:
-            working = re.split(r"\bSPEC\b", working, maxsplit=1, flags=re.IGNORECASE)[0]
+            parts = re.split(r"\bSPEC\b", line, maxsplit=1, flags=re.IGNORECASE)
 
-        working = self._compact_text(working)
-        working = re.sub(r"^(Игры|Games)\s+", "", working, flags=re.IGNORECASE)
+        if not parts:
+            return ""
 
-        return working.strip()
+        map_name = self._compact_text(parts[0])
+
+        map_name = re.sub(r"\s+#\d+\s*$", "", map_name).strip()
+
+        return map_name
 
     @staticmethod
     def _compact_text(value: str) -> str:
