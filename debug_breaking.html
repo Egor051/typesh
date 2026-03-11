@@ -1,0 +1,1873 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+	<title>Панель SQUAD</title>
+	<meta name="description" content="Панель управления серверами SQUAD">
+	<meta name="author" content="Enj0y">
+	<meta name="keywords" content="">
+	
+	<meta property="og:title" content="Панель SQUAD"/>
+	<meta property="og:description" content="Панель управления серверами SQUAD"/>
+	
+	
+	<link rel="manifest" href="/manifest.json?v=0.7.9c">
+	<meta name="mobile-web-app-capable" content="yes">
+	<meta name="apple-mobile-web-app-status-bar-style" content="#ffffff">
+	<meta name="theme-color" content="#ffffff"/>
+	<meta name="apple-mobile-web-app-capable" content="yes">
+	<meta name="application-name" content="sqstat">
+	<meta name="apple-mobile-web-app-title" content="sqstat">
+	<meta name="msapplication-starturl" content="/">
+	<meta name="viewport" content="width=device-width, initial-scale=0.8, shrink-to-fit=no, maximum-scale=0.8, user-scalable=no">
+	<meta charset="UTF-8">
+	
+	<link rel="shortcut icon" href="/assets/img/ico/favicon.png" />
+
+	<link rel="apple-touch-icon" href="/assets/img/ico/favicon-pwa192x192.png">
+	<link rel="apple-touch-icon" sizes="512x512" href="/assets/img/ico/favicon-pwa512x512.png">
+	
+	<link rel="stylesheet" type="text/css" href="/assets/css/bootstrap.min.css?v3.4.1">
+	
+	<!--
+	<link rel="stylesheet" type="text/css" href="/assets/css/font-awesome.min.css">
+	-->
+	
+	<link href="/assets/fontawesome/css/all.min.css" rel="stylesheet">
+	<link href="/assets/fontawesome/css/v4-shims.min.css" rel="stylesheet">
+	
+	<link rel="stylesheet" type="text/css" href="/assets/css/style.css?v=0.7.9c">
+	<link type="text/css" rel="stylesheet" href="/assets/css/animate.css">
+	<link type="text/css" rel="stylesheet" href="/assets/css/pnotify.custom.min.css?v=1.1">
+	<link type="text/css" rel="stylesheet" href="/assets/js/leaflet/leaflet.css">
+	
+	<script>
+		var lang = {};
+	</script>
+	<script src="/assets/js/jquery-2.2.4.min.js"></script>
+	<script src="/assets/js/jquery-ui-1.13.2.min.js"></script>
+	
+	<script>
+	window.onerror = function(msg, url, lineNo, columnNo, error) {
+		$('#content').prepend('<div style="position: fixed; z-index:1060;" class="alert alert-danger" role="alert"><button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button><h4>Ошибка</h4><p>'+url+':'+lineNo+'</p><p>'+msg+'</p></div>');
+	};
+	</script>
+</head>
+<body class="">
+<nav class="navbar navbar-default navbar-fixed-top affix" data-spy="affix" data-offset-top="160" style="box-shadow: 0px -20px 40px rgba(0,0,0,0.5);">
+	<div class="container">
+		<div class="col-md-12">
+			<div class="navbar-header">
+				<button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar" aria-expanded="false" aria-controls="navbar">
+					<span class="sr-only">Меню</span>
+					<span class="icon-bar"></span>
+					<span class="icon-bar"></span>
+					<span class="icon-bar"></span>
+				</button>
+				<div>
+					<a class="navbar-brand" href="/" >
+						<img class="" src="/assets/img/sqstat.png">
+					</a>
+					<div id="panelAdmins" style="display:inline-block;padding-top:15px;padding-bottom:5px;color:#777;"></div>
+					<div class="themes">
+						<div style="background-color:#fff" data-theme=""></div>
+						<div style="background-color:#23282c" data-theme="dark"></div>
+					</div>
+				</div>
+				
+			</div>
+			<div id="navbar" class="navbar-collapse collapse" >
+				<ul class="nav navbar-nav navbar-right">
+																		<li><a href="https://discord.gg/dHduJPFV7g" target="_blank" class="pd-10"><img src="/assets/img/discord.png" class="img-responsive" style="width:30px;"></a></li>
+																		<li><a href="/"><i class="fa-fw fa-solid fa-server"></i> Сервера</a></li>
+												<li class="dropdown">
+							<a href="#" class="dropdown-toggle" data-toggle="dropdown" data-hover="dropdown" style="min-width:0;">
+								<span class=""><i class="fa-fw fa-solid fa-chart-simple"></i> Топ игроков</span>
+								<i class="fa-fw fa fa-caret-down"></i>
+							</a>
+							<ul class="dropdown-menu" role="menu">
+								<li><a href="/top/kills.php"><i class="fa-fw fa-solid fa-solid fa-crosshairs"></i> По убийствам</a></li>
+								<li><a href="/top/death.php"><i class="fa-fw fa-solid fa-skull-crossbones"></i> По смертям</a></li>
+								<li><a href="/top/revive.php"><i class="fa-fw fa-solid fa-star-of-life"></i> По поднятиям</a></li>
+							</ul>
+						</li>
+												<li class="hide"><a href="/d"><i class="fa-fw fa-brands fa-discord"></i> Discord</a></li>
+
+												
+						<li><a href="/faq" target="_blank"><i class="fa-fw fa fa-wpforms"></i> Wiki</a></li>
+						
+													<li>
+								<a href="" onclick="steamAuth(this, event)"><i class="fa-fw fa fa-sign-in"></i> Вход</a>
+							</li>
+															</ul>
+			</div>
+		</div>
+
+	</div>
+</nav>
+
+
+<div id="pwa_reload" style="display:none;">
+	<div class="pwa_emptyblock"></div>
+	<div class="pwa_spin">
+		<i class="fa-solid fa-rotate-right fa-2x fa-rotate-by text-muted" style="--fa-animation-duration: 0.5s;--fa-rotate-angle:0deg;"></i>
+	</div>
+</div>
+
+
+<div class="container">
+	<div id="content">
+		<div id="serverList" class="col-xs-12 display-flex" style="margin-top:4%">
+						<div class="col-md-3" data-server="1">
+				<div class="w-100">
+					<div class="block-box-head" style="background-image: url('/assets/img/banners/servers/1.png');">
+						RAAS/AAS					</div>
+					<div class="block-box" style="padding-bottom: 15px;">
+						<div class="row block-box-content">
+							<div data-type="slider" style="height:160px; width:100%;margin: auto;"></div>
+							<div class="chart-container" style="height:120px;margin: 10px -10px 10px -10px;">
+								<canvas data-type="chart"></canvas>
+							</div>
+							<div class="col-xs-7" style="padding:0px 2px 0px 2px">
+								<h4 class="mt-0 mb-5 text-center">Текущая</h4>
+								<img data-type="map" data-toggle="tooltip" data-original-title="" src="" class="img-rounded img-responsive">
+							</div>
+							<div class="col-xs-5" style="padding:0">
+								<h4 class="mt-15 mb-5 text-center"><i class="fa fa-arrow-right"></i></h4>
+								<img data-type="nextMap" data-toggle="tooltip" data-original-title="" src="" class="img-rounded img-responsive">
+							</div>
+							<div class="col-xs-12 mt-10" style="padding:0">
+								<button onclick="mapRotation.open('public', 1)" type="button" class="btn btn-default btn-100 mb-5"><i class="fa fa-map"></i> Ротация</button>
+								<button onclick="mapCalendar.init(this, 1)" type="button" class="btn btn-default btn-100"><i class="fa fa-calendar"></i> Календарь</button>
+								
+																
+								<a href="" class="btn btn-success btn-lg btn-100 mt-10 disabled"><i class="fa-solid fa-play"></i> Подключиться</a>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+						<div class="col-md-3" data-server="6">
+				<div class="w-100">
+					<div class="block-box-head" style="background-image: url('/assets/img/banners/servers/2.png');">
+						SPEC					</div>
+					<div class="block-box" style="padding-bottom: 15px;">
+						<div class="row block-box-content">
+							<div data-type="slider" style="height:160px; width:100%;margin: auto;"></div>
+							<div class="chart-container" style="height:120px;margin: 10px -10px 10px -10px;">
+								<canvas data-type="chart"></canvas>
+							</div>
+							<div class="col-xs-7" style="padding:0px 2px 0px 2px">
+								<h4 class="mt-0 mb-5 text-center">Текущая</h4>
+								<img data-type="map" data-toggle="tooltip" data-original-title="" src="" class="img-rounded img-responsive">
+							</div>
+							<div class="col-xs-5" style="padding:0">
+								<h4 class="mt-15 mb-5 text-center"><i class="fa fa-arrow-right"></i></h4>
+								<img data-type="nextMap" data-toggle="tooltip" data-original-title="" src="" class="img-rounded img-responsive">
+							</div>
+							<div class="col-xs-12 mt-10" style="padding:0">
+								<button onclick="mapRotation.open('public', 6)" type="button" class="btn btn-default btn-100 mb-5"><i class="fa fa-map"></i> Ротация</button>
+								<button onclick="mapCalendar.init(this, 6)" type="button" class="btn btn-default btn-100"><i class="fa fa-calendar"></i> Календарь</button>
+								
+																
+								<a href="/d/?s=6" class="btn btn-success btn-lg btn-100 mt-10 "><i class="fa-solid fa-play"></i> Подключиться</a>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+						<div class="col-md-3" data-server="10">
+				<div class="w-100">
+					<div class="block-box-head" style="background-image: url('/assets/img/banners/servers/3.png');">
+						FW/MDC					</div>
+					<div class="block-box" style="padding-bottom: 15px;">
+						<div class="row block-box-content">
+							<div data-type="slider" style="height:160px; width:100%;margin: auto;"></div>
+							<div class="chart-container" style="height:120px;margin: 10px -10px 10px -10px;">
+								<canvas data-type="chart"></canvas>
+							</div>
+							<div class="col-xs-7" style="padding:0px 2px 0px 2px">
+								<h4 class="mt-0 mb-5 text-center">Текущая</h4>
+								<img data-type="map" data-toggle="tooltip" data-original-title="" src="" class="img-rounded img-responsive">
+							</div>
+							<div class="col-xs-5" style="padding:0">
+								<h4 class="mt-15 mb-5 text-center"><i class="fa fa-arrow-right"></i></h4>
+								<img data-type="nextMap" data-toggle="tooltip" data-original-title="" src="" class="img-rounded img-responsive">
+							</div>
+							<div class="col-xs-12 mt-10" style="padding:0">
+								<button onclick="mapRotation.open('public', 10)" type="button" class="btn btn-default btn-100 mb-5"><i class="fa fa-map"></i> Ротация</button>
+								<button onclick="mapCalendar.init(this, 10)" type="button" class="btn btn-default btn-100"><i class="fa fa-calendar"></i> Календарь</button>
+								
+																
+								<a href="" class="btn btn-success btn-lg btn-100 mt-10 disabled"><i class="fa-solid fa-play"></i> Подключиться</a>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+					</div>
+		<div class="col-xs-12">
+			<h2 class="text-center">Игры</h2><hr/>			<div class="row">
+				<div class="col-xs-12 display-flex">
+									<div class="col-lg-3 col-md-4 col-xs-6">
+						<div class="panel panel-default" style="width: 100%;">
+							<div class="panel-body">
+								<h3 class="text-center">Gorodok AAS v1</h3>
+								<div class="col-xs-12 text-center mb-10">
+									<b>RAAS/AAS #1</b>
+								</div>
+								<div class="col-xs-12 text-center mb-15">
+									<span data-type="date" class="badge bg-dark">1773258390</span> - <span data-type="date" class="badge bg-dark">1773261330</span>
+								</div>
+								<div class="col-xs-6 text-center">
+									<img src="/assets/img/ico/teams/RGF.png">
+									<p><b>RGF</b></p>
+									<p>160</p>
+								</div>
+								<div class="col-xs-6 text-center">
+									<img src="/assets/img/ico/teams/CAF.png">
+									<p><b>CAF</b></p>
+									<p>0</p>
+								</div>
+								<div class="col-xs-12 mt-15">
+									<button onclick="window.location.href = '/game/29772'" class="btn btn-default btn-100">Открыть</button>
+								</div>
+							</div>
+						</div>
+					</div>
+									<div class="col-lg-3 col-md-4 col-xs-6">
+						<div class="panel panel-default" style="width: 100%;">
+							<div class="panel-body">
+								<h3 class="text-center">SEC 26 Harju AAS v1</h3>
+								<div class="col-xs-12 text-center mb-10">
+									<b>FW/MDC TRAINING</b>
+								</div>
+								<div class="col-xs-12 text-center mb-15">
+									<span data-type="date" class="badge bg-dark">1773256098</span> - <span data-type="date" class="badge bg-dark">1773259467</span>
+								</div>
+								<div class="col-xs-6 text-center">
+									<img src="/assets/img/ico/teams/ADF.png">
+									<p><b>ADF</b></p>
+									<p>0</p>
+								</div>
+								<div class="col-xs-6 text-center">
+									<img src="/assets/img/ico/teams/118th Combined Arms Brigade.png">
+									<p><b>118th Combined Arms Brigade</b></p>
+									<p>3</p>
+								</div>
+								<div class="col-xs-12 mt-15">
+									<button onclick="window.location.href = '/game/29771'" class="btn btn-default btn-100">Открыть</button>
+								</div>
+							</div>
+						</div>
+					</div>
+									<div class="col-lg-3 col-md-4 col-xs-6">
+						<div class="panel panel-default" style="width: 100%;">
+							<div class="panel-body">
+								<h3 class="text-center">Yehorivka AAS v2</h3>
+								<div class="col-xs-12 text-center mb-10">
+									<b>RAAS/AAS #1</b>
+								</div>
+								<div class="col-xs-12 text-center mb-15">
+									<span data-type="date" class="badge bg-dark">1773256222</span> - <span data-type="date" class="badge bg-dark">1773258195</span>
+								</div>
+								<div class="col-xs-6 text-center">
+									<img src="/assets/img/ico/teams/ADF.png">
+									<p><b>ADF</b></p>
+									<p>0</p>
+								</div>
+								<div class="col-xs-6 text-center">
+									<img src="/assets/img/ico/teams/4th Marine Special Combat Battalion.png">
+									<p><b>4th Marine Special Combat Battalion</b></p>
+									<p>306</p>
+								</div>
+								<div class="col-xs-12 mt-15">
+									<button onclick="window.location.href = '/game/29770'" class="btn btn-default btn-100">Открыть</button>
+								</div>
+							</div>
+						</div>
+					</div>
+									<div class="col-lg-3 col-md-4 col-xs-6">
+						<div class="panel panel-default" style="width: 100%;">
+							<div class="panel-body">
+								<h3 class="text-center">SEC 26 Harju AAS v1</h3>
+								<div class="col-xs-12 text-center mb-10">
+									<b>FW/MDC TRAINING</b>
+								</div>
+								<div class="col-xs-12 text-center mb-15">
+									<span data-type="date" class="badge bg-dark">1773256060</span> - <span data-type="date" class="badge bg-dark">1773256081</span>
+								</div>
+								<div class="col-xs-6 text-center">
+									<img src="/assets/img/ico/teams/ADF.png">
+									<p><b>ADF</b></p>
+									<p>0</p>
+								</div>
+								<div class="col-xs-6 text-center">
+									<img src="/assets/img/ico/teams/118th Combined Arms Brigade.png">
+									<p><b>118th Combined Arms Brigade</b></p>
+									<p>0</p>
+								</div>
+								<div class="col-xs-12 mt-15">
+									<button onclick="window.location.href = '/game/29769'" class="btn btn-default btn-100">Открыть</button>
+								</div>
+							</div>
+						</div>
+					</div>
+									<div class="col-lg-3 col-md-4 col-xs-6">
+						<div class="panel panel-default" style="width: 100%;">
+							<div class="panel-body">
+								<h3 class="text-center">SEC 26 Harju AAS v1</h3>
+								<div class="col-xs-12 text-center mb-10">
+									<b>FW/MDC TRAINING</b>
+								</div>
+								<div class="col-xs-12 text-center mb-15">
+									<span data-type="date" class="badge bg-dark">1773255807</span> - <span data-type="date" class="badge bg-dark">1773256047</span>
+								</div>
+								<div class="col-xs-6 text-center">
+									<img src="/assets/img/ico/teams/SEC26.png">
+									<p><b>SEC26</b></p>
+									<p>0</p>
+								</div>
+								<div class="col-xs-6 text-center">
+									<img src="/assets/img/ico/teams/SEC26.png">
+									<p><b>SEC26</b></p>
+									<p>0</p>
+								</div>
+								<div class="col-xs-12 mt-15">
+									<button onclick="window.location.href = '/game/29768'" class="btn btn-default btn-100">Открыть</button>
+								</div>
+							</div>
+						</div>
+					</div>
+									<div class="col-lg-3 col-md-4 col-xs-6">
+						<div class="panel panel-default" style="width: 100%;">
+							<div class="panel-body">
+								<h3 class="text-center">Fallujah AAS v1</h3>
+								<div class="col-xs-12 text-center mb-10">
+									<b>RAAS/AAS #1</b>
+								</div>
+								<div class="col-xs-12 text-center mb-15">
+									<span data-type="date" class="badge bg-dark">1773253357</span> - <span data-type="date" class="badge bg-dark">1773256025</span>
+								</div>
+								<div class="col-xs-6 text-center">
+									<img src="/assets/img/ico/teams/CAF.png">
+									<p><b>CAF</b></p>
+									<p>7</p>
+								</div>
+								<div class="col-xs-6 text-center">
+									<img src="/assets/img/ico/teams/PLA.png">
+									<p><b>PLA</b></p>
+									<p>0</p>
+								</div>
+								<div class="col-xs-12 mt-15">
+									<button onclick="window.location.href = '/game/29767'" class="btn btn-default btn-100">Открыть</button>
+								</div>
+							</div>
+						</div>
+					</div>
+									<div class="col-lg-3 col-md-4 col-xs-6">
+						<div class="panel panel-default" style="width: 100%;">
+							<div class="panel-body">
+								<h3 class="text-center">SEC 26 Harju AAS v1</h3>
+								<div class="col-xs-12 text-center mb-10">
+									<b>FW/MDC TRAINING</b>
+								</div>
+								<div class="col-xs-12 text-center mb-15">
+									<span data-type="date" class="badge bg-dark">1773255773</span> - <span data-type="date" class="badge bg-dark">1773255791</span>
+								</div>
+								<div class="col-xs-6 text-center">
+									<img src="/assets/img/ico/teams/ADF.png">
+									<p><b>ADF</b></p>
+									<p>0</p>
+								</div>
+								<div class="col-xs-6 text-center">
+									<img src="/assets/img/ico/teams/118th Combined Arms Brigade.png">
+									<p><b>118th Combined Arms Brigade</b></p>
+									<p>0</p>
+								</div>
+								<div class="col-xs-12 mt-15">
+									<button onclick="window.location.href = '/game/29766'" class="btn btn-default btn-100">Открыть</button>
+								</div>
+							</div>
+						</div>
+					</div>
+									<div class="col-lg-3 col-md-4 col-xs-6">
+						<div class="panel panel-default" style="width: 100%;">
+							<div class="panel-body">
+								<h3 class="text-center">Deathmatch</h3>
+								<div class="col-xs-12 text-center mb-10">
+									<b>FW/MDC TRAINING</b>
+								</div>
+								<div class="col-xs-12 text-center mb-15">
+									<span data-type="date" class="badge bg-dark">1773255755</span> - <span data-type="date" class="badge bg-dark">1773255758</span>
+								</div>
+								<div class="col-xs-6 text-center">
+									<img src="/assets/img/ico/teams/SEC26.png">
+									<p><b>SEC26</b></p>
+									<p>0</p>
+								</div>
+								<div class="col-xs-6 text-center">
+									<img src="/assets/img/ico/teams/SEC26.png">
+									<p><b>SEC26</b></p>
+									<p>0</p>
+								</div>
+								<div class="col-xs-12 mt-15">
+									<button onclick="window.location.href = '/game/29765'" class="btn btn-default btn-100">Открыть</button>
+								</div>
+							</div>
+						</div>
+					</div>
+									<div class="col-lg-3 col-md-4 col-xs-6">
+						<div class="panel panel-default" style="width: 100%;">
+							<div class="panel-body">
+								<h3 class="text-center">SEC 26 Harju AAS v1</h3>
+								<div class="col-xs-12 text-center mb-10">
+									<b>FW/MDC TRAINING</b>
+								</div>
+								<div class="col-xs-12 text-center mb-15">
+									<span data-type="date" class="badge bg-dark">1773252933</span> - <span data-type="date" class="badge bg-dark">1773255664</span>
+								</div>
+								<div class="col-xs-6 text-center">
+									<img src="/assets/img/ico/teams/SEC26.png">
+									<p><b>SEC26</b></p>
+									<p>67</p>
+								</div>
+								<div class="col-xs-6 text-center">
+									<img src="/assets/img/ico/teams/SEC26.png">
+									<p><b>SEC26</b></p>
+									<p>0</p>
+								</div>
+								<div class="col-xs-12 mt-15">
+									<button onclick="window.location.href = '/game/29764'" class="btn btn-default btn-100">Открыть</button>
+								</div>
+							</div>
+						</div>
+					</div>
+									<div class="col-lg-3 col-md-4 col-xs-6">
+						<div class="panel panel-default" style="width: 100%;">
+							<div class="panel-body">
+								<h3 class="text-center">Narva AAS v2</h3>
+								<div class="col-xs-12 text-center mb-10">
+									<b>RAAS/AAS #1</b>
+								</div>
+								<div class="col-xs-12 text-center mb-15">
+									<span data-type="date" class="badge bg-dark">1773250690</span> - <span data-type="date" class="badge bg-dark">1773253162</span>
+								</div>
+								<div class="col-xs-6 text-center">
+									<img src="/assets/img/ico/teams/2nd Cavalry Stryker Brigade.png">
+									<p><b>2nd Cavalry Stryker Brigade</b></p>
+									<p>0</p>
+								</div>
+								<div class="col-xs-6 text-center">
+									<img src="/assets/img/ico/teams/BAF.png">
+									<p><b>BAF</b></p>
+									<p>15</p>
+								</div>
+								<div class="col-xs-12 mt-15">
+									<button onclick="window.location.href = '/game/29763'" class="btn btn-default btn-100">Открыть</button>
+								</div>
+							</div>
+						</div>
+					</div>
+									<div class="col-lg-3 col-md-4 col-xs-6">
+						<div class="panel panel-default" style="width: 100%;">
+							<div class="panel-body">
+								<h3 class="text-center">SEC 26 Harju AAS v1</h3>
+								<div class="col-xs-12 text-center mb-10">
+									<b>FW/MDC TRAINING</b>
+								</div>
+								<div class="col-xs-12 text-center mb-15">
+									<span data-type="date" class="badge bg-dark">1773252648</span> - <span data-type="date" class="badge bg-dark">1773252917</span>
+								</div>
+								<div class="col-xs-6 text-center">
+									<img src="/assets/img/ico/teams/SEC26.png">
+									<p><b>SEC26</b></p>
+									<p>194</p>
+								</div>
+								<div class="col-xs-6 text-center">
+									<img src="/assets/img/ico/teams/SEC26.png">
+									<p><b>SEC26</b></p>
+									<p>197</p>
+								</div>
+								<div class="col-xs-12 mt-15">
+									<button onclick="window.location.href = '/game/29762'" class="btn btn-default btn-100">Открыть</button>
+								</div>
+							</div>
+						</div>
+					</div>
+									<div class="col-lg-3 col-md-4 col-xs-6">
+						<div class="panel panel-default" style="width: 100%;">
+							<div class="panel-body">
+								<h3 class="text-center">SEC 26 Harju AAS v1</h3>
+								<div class="col-xs-12 text-center mb-10">
+									<b>FW/MDC TRAINING</b>
+								</div>
+								<div class="col-xs-12 text-center mb-15">
+									<span data-type="date" class="badge bg-dark">1773252218</span> - <span data-type="date" class="badge bg-dark">1773252236</span>
+								</div>
+								<div class="col-xs-6 text-center">
+									<img src="/assets/img/ico/teams/NVR.png">
+									<p><b>NVR</b></p>
+									<p>0</p>
+								</div>
+								<div class="col-xs-6 text-center">
+									<img src="/assets/img/ico/teams/NVR.png">
+									<p><b>NVR</b></p>
+									<p>0</p>
+								</div>
+								<div class="col-xs-12 mt-15">
+									<button onclick="window.location.href = '/game/29760'" class="btn btn-default btn-100">Открыть</button>
+								</div>
+							</div>
+						</div>
+					</div>
+									<div class="col-lg-3 col-md-4 col-xs-6">
+						<div class="panel panel-default" style="width: 100%;">
+							<div class="panel-body">
+								<h3 class="text-center">SEC 26 Harju AAS v1</h3>
+								<div class="col-xs-12 text-center mb-10">
+									<b>FW/MDC TRAINING</b>
+								</div>
+								<div class="col-xs-12 text-center mb-15">
+									<span data-type="date" class="badge bg-dark">1773251549</span> - <span data-type="date" class="badge bg-dark">1773251985</span>
+								</div>
+								<div class="col-xs-6 text-center">
+									<img src="/assets/img/ico/teams/SEC26.png">
+									<p><b>SEC26</b></p>
+									<p>0</p>
+								</div>
+								<div class="col-xs-6 text-center">
+									<img src="/assets/img/ico/teams/SEC26.png">
+									<p><b>SEC26</b></p>
+									<p>0</p>
+								</div>
+								<div class="col-xs-12 mt-15">
+									<button onclick="window.location.href = '/game/29759'" class="btn btn-default btn-100">Открыть</button>
+								</div>
+							</div>
+						</div>
+					</div>
+									<div class="col-lg-3 col-md-4 col-xs-6">
+						<div class="panel panel-default" style="width: 100%;">
+							<div class="panel-body">
+								<h3 class="text-center">SEC 26 Harju AAS v1</h3>
+								<div class="col-xs-12 text-center mb-10">
+									<b>FW/MDC TRAINING</b>
+								</div>
+								<div class="col-xs-12 text-center mb-15">
+									<span data-type="date" class="badge bg-dark">1773251158</span> - <span data-type="date" class="badge bg-dark">1773251533</span>
+								</div>
+								<div class="col-xs-6 text-center">
+									<img src="/assets/img/ico/teams/SEC26.png">
+									<p><b>SEC26</b></p>
+									<p>198</p>
+								</div>
+								<div class="col-xs-6 text-center">
+									<img src="/assets/img/ico/teams/SEC26.png">
+									<p><b>SEC26</b></p>
+									<p>200</p>
+								</div>
+								<div class="col-xs-12 mt-15">
+									<button onclick="window.location.href = '/game/29758'" class="btn btn-default btn-100">Открыть</button>
+								</div>
+							</div>
+						</div>
+					</div>
+									<div class="col-lg-3 col-md-4 col-xs-6">
+						<div class="panel panel-default" style="width: 100%;">
+							<div class="panel-body">
+								<h3 class="text-center">SEC 26 Harju AAS v1</h3>
+								<div class="col-xs-12 text-center mb-10">
+									<b>FW/MDC TRAINING</b>
+								</div>
+								<div class="col-xs-12 text-center mb-15">
+									<span data-type="date" class="badge bg-dark">1773250831</span> - <span data-type="date" class="badge bg-dark">1773251144</span>
+								</div>
+								<div class="col-xs-6 text-center">
+									<img src="/assets/img/ico/teams/ADF.png">
+									<p><b>ADF</b></p>
+									<p>0</p>
+								</div>
+								<div class="col-xs-6 text-center">
+									<img src="/assets/img/ico/teams/118th Combined Arms Brigade.png">
+									<p><b>118th Combined Arms Brigade</b></p>
+									<p>0</p>
+								</div>
+								<div class="col-xs-12 mt-15">
+									<button onclick="window.location.href = '/game/29757'" class="btn btn-default btn-100">Открыть</button>
+								</div>
+							</div>
+						</div>
+					</div>
+									<div class="col-lg-3 col-md-4 col-xs-6">
+						<div class="panel panel-default" style="width: 100%;">
+							<div class="panel-body">
+								<h3 class="text-center">SEC 26 Harju AAS v1</h3>
+								<div class="col-xs-12 text-center mb-10">
+									<b>FW/MDC TRAINING</b>
+								</div>
+								<div class="col-xs-12 text-center mb-15">
+									<span data-type="date" class="badge bg-dark">1773250469</span> - <span data-type="date" class="badge bg-dark">1773250780</span>
+								</div>
+								<div class="col-xs-6 text-center">
+									<img src="/assets/img/ico/teams/SEC26.png">
+									<p><b>SEC26</b></p>
+									<p>0</p>
+								</div>
+								<div class="col-xs-6 text-center">
+									<img src="/assets/img/ico/teams/SEC26.png">
+									<p><b>SEC26</b></p>
+									<p>0</p>
+								</div>
+								<div class="col-xs-12 mt-15">
+									<button onclick="window.location.href = '/game/29756'" class="btn btn-default btn-100">Открыть</button>
+								</div>
+							</div>
+						</div>
+					</div>
+									<div class="col-lg-3 col-md-4 col-xs-6">
+						<div class="panel panel-default" style="width: 100%;">
+							<div class="panel-body">
+								<h3 class="text-center">Harju AAS v3</h3>
+								<div class="col-xs-12 text-center mb-10">
+									<b>RAAS/AAS #1</b>
+								</div>
+								<div class="col-xs-12 text-center mb-15">
+									<span data-type="date" class="badge bg-dark">1773248384</span> - <span data-type="date" class="badge bg-dark">1773250494</span>
+								</div>
+								<div class="col-xs-6 text-center">
+									<img src="/assets/img/ico/teams/IMF.png">
+									<p><b>IMF</b></p>
+									<p>214</p>
+								</div>
+								<div class="col-xs-6 text-center">
+									<img src="/assets/img/ico/teams/ADF.png">
+									<p><b>ADF</b></p>
+									<p>0</p>
+								</div>
+								<div class="col-xs-12 mt-15">
+									<button onclick="window.location.href = '/game/29755'" class="btn btn-default btn-100">Открыть</button>
+								</div>
+							</div>
+						</div>
+					</div>
+									<div class="col-lg-3 col-md-4 col-xs-6">
+						<div class="panel panel-default" style="width: 100%;">
+							<div class="panel-body">
+								<h3 class="text-center">SEC 26 Harju AAS v1</h3>
+								<div class="col-xs-12 text-center mb-10">
+									<b>FW/MDC TRAINING</b>
+								</div>
+								<div class="col-xs-12 text-center mb-15">
+									<span data-type="date" class="badge bg-dark">1773250414</span> - <span data-type="date" class="badge bg-dark">1773250459</span>
+								</div>
+								<div class="col-xs-6 text-center">
+									<img src="/assets/img/ico/teams/SEC26.png">
+									<p><b>SEC26</b></p>
+									<p>0</p>
+								</div>
+								<div class="col-xs-6 text-center">
+									<img src="/assets/img/ico/teams/SEC26.png">
+									<p><b>SEC26</b></p>
+									<p>0</p>
+								</div>
+								<div class="col-xs-12 mt-15">
+									<button onclick="window.location.href = '/game/29754'" class="btn btn-default btn-100">Открыть</button>
+								</div>
+							</div>
+						</div>
+					</div>
+									<div class="col-lg-3 col-md-4 col-xs-6">
+						<div class="panel panel-default" style="width: 100%;">
+							<div class="panel-body">
+								<h3 class="text-center">Mutaha AAS v1</h3>
+								<div class="col-xs-12 text-center mb-10">
+									<b>RAAS/AAS #1</b>
+								</div>
+								<div class="col-xs-12 text-center mb-15">
+									<span data-type="date" class="badge bg-dark">1773246417</span> - <span data-type="date" class="badge bg-dark">1773248188</span>
+								</div>
+								<div class="col-xs-6 text-center">
+									<img src="/assets/img/ico/teams/USMC.png">
+									<p><b>USMC</b></p>
+									<p>0</p>
+								</div>
+								<div class="col-xs-6 text-center">
+									<img src="/assets/img/ico/teams/CAF.png">
+									<p><b>CAF</b></p>
+									<p>192</p>
+								</div>
+								<div class="col-xs-12 mt-15">
+									<button onclick="window.location.href = '/game/29753'" class="btn btn-default btn-100">Открыть</button>
+								</div>
+							</div>
+						</div>
+					</div>
+									<div class="col-lg-3 col-md-4 col-xs-6">
+						<div class="panel panel-default" style="width: 100%;">
+							<div class="panel-body">
+								<h3 class="text-center">Fallujah RAAS v2</h3>
+								<div class="col-xs-12 text-center mb-10">
+									<b>RAAS/AAS #1</b>
+								</div>
+								<div class="col-xs-12 text-center mb-15">
+									<span data-type="date" class="badge bg-dark">1773244194</span> - <span data-type="date" class="badge bg-dark">1773246187</span>
+								</div>
+								<div class="col-xs-6 text-center">
+									<img src="/assets/img/ico/teams/IMF.png">
+									<p><b>IMF</b></p>
+									<p>0</p>
+								</div>
+								<div class="col-xs-6 text-center">
+									<img src="/assets/img/ico/teams/ADF.png">
+									<p><b>ADF</b></p>
+									<p>115</p>
+								</div>
+								<div class="col-xs-12 mt-15">
+									<button onclick="window.location.href = '/game/29752'" class="btn btn-default btn-100">Открыть</button>
+								</div>
+							</div>
+						</div>
+					</div>
+								</div>
+			</div>
+		</div>
+		
+					<div class="col-xs-12">
+				<hr/>
+				<img src="/api/img/weekKits-breaking.jpg?202611" class="img-responsive"/>
+			</div>
+			<div class="col-xs-12 mb-15">
+				<hr/>
+				<img src="/api/img/weekServerStat-breaking.jpg?202611" class="img-responsive"/>
+			</div>
+			<div class="col-xs-12 mb-15">
+				<hr/>
+				<img src="/api/img/weekKills-breaking.jpg?202611" class="img-responsive"/>
+			</div>
+				
+		
+		<h2 class="text-center">Кланы</h2><hr/>		<div class="col-xs-12 display-flex">
+
+			
+						<div class="col-lg-3 col-md-4 col-xs-6">
+				<div class="panel panel-default" style="width: 100%;">
+					<div class="panel-body">
+						<h3 class="text-center">[MDC]</h3>
+						<div class="col-xs-12">
+							<label>Игроков:</label> 56						</div>
+						<div class="col-xs-12">
+							<label>Тэги:</label> <span class="label label-primary">Mdc |</span> <span class="label label-primary">MdcK |</span> 						</div>
+						<div class="col-xs-12">
+							<button onclick="window.location.href = '/clan/16'" class="btn btn-default btn-100">Открыть</button>
+						</div>
+					</div>
+				</div>
+			</div>
+						<div class="col-lg-3 col-md-4 col-xs-6">
+				<div class="panel panel-default" style="width: 100%;">
+					<div class="panel-body">
+						<h3 class="text-center">｢82AD｣</h3>
+						<div class="col-xs-12">
+							<label>Игроков:</label> 52						</div>
+						<div class="col-xs-12">
+							<label>Тэги:</label> <span class="label label-primary">｢82AD｣</span> 						</div>
+						<div class="col-xs-12">
+							<button onclick="window.location.href = '/clan/17'" class="btn btn-default btn-100">Открыть</button>
+						</div>
+					</div>
+				</div>
+			</div>
+						<div class="col-lg-3 col-md-4 col-xs-6">
+				<div class="panel panel-default" style="width: 100%;">
+					<div class="panel-body">
+						<h3 class="text-center">bITb!</h3>
+						<div class="col-xs-12">
+							<label>Игроков:</label> 13						</div>
+						<div class="col-xs-12">
+							<label>Тэги:</label> <span class="label label-primary">bITb!</span> 						</div>
+						<div class="col-xs-12">
+							<button onclick="window.location.href = '/clan/18'" class="btn btn-default btn-100">Открыть</button>
+						</div>
+					</div>
+				</div>
+			</div>
+						<div class="col-lg-3 col-md-4 col-xs-6">
+				<div class="panel panel-default" style="width: 100%;">
+					<div class="panel-body">
+						<h3 class="text-center">[0:5:0]</h3>
+						<div class="col-xs-12">
+							<label>Игроков:</label> 24						</div>
+						<div class="col-xs-12">
+							<label>Тэги:</label> <span class="label label-primary">[0:5:0]</span> 						</div>
+						<div class="col-xs-12">
+							<button onclick="window.location.href = '/clan/29'" class="btn btn-default btn-100">Открыть</button>
+						</div>
+					</div>
+				</div>
+			</div>
+						<div class="col-lg-3 col-md-4 col-xs-6">
+				<div class="panel panel-default" style="width: 100%;">
+					<div class="panel-body">
+						<h3 class="text-center">Full Wipe</h3>
+						<div class="col-xs-12">
+							<label>Игроков:</label> 102						</div>
+						<div class="col-xs-12">
+							<label>Тэги:</label> <span class="label label-primary">『FW』</span> 						</div>
+						<div class="col-xs-12">
+							<button onclick="window.location.href = '/clan/35'" class="btn btn-default btn-100">Открыть</button>
+						</div>
+					</div>
+				</div>
+			</div>
+						<div class="col-lg-3 col-md-4 col-xs-6">
+				<div class="panel panel-default" style="width: 100%;">
+					<div class="panel-body">
+						<h3 class="text-center">APACHE</h3>
+						<div class="col-xs-12">
+							<label>Игроков:</label> 33						</div>
+						<div class="col-xs-12">
+							<label>Тэги:</label> <span class="label label-primary">『AP』</span> 						</div>
+						<div class="col-xs-12">
+							<button onclick="window.location.href = '/clan/40'" class="btn btn-default btn-100">Открыть</button>
+						</div>
+					</div>
+				</div>
+			</div>
+						<div class="col-lg-3 col-md-4 col-xs-6">
+				<div class="panel panel-default" style="width: 100%;">
+					<div class="panel-body">
+						<h3 class="text-center">┃KZ┃</h3>
+						<div class="col-xs-12">
+							<label>Игроков:</label> 33						</div>
+						<div class="col-xs-12">
+							<label>Тэги:</label> 						</div>
+						<div class="col-xs-12">
+							<button onclick="window.location.href = '/clan/44'" class="btn btn-default btn-100">Открыть</button>
+						</div>
+					</div>
+				</div>
+			</div>
+						<div class="col-lg-3 col-md-4 col-xs-6">
+				<div class="panel panel-default" style="width: 100%;">
+					<div class="panel-body">
+						<h3 class="text-center">SITH</h3>
+						<div class="col-xs-12">
+							<label>Игроков:</label> 14						</div>
+						<div class="col-xs-12">
+							<label>Тэги:</label> <span class="label label-primary">[SITH]</span> 						</div>
+						<div class="col-xs-12">
+							<button onclick="window.location.href = '/clan/47'" class="btn btn-default btn-100">Открыть</button>
+						</div>
+					</div>
+				</div>
+			</div>
+						<div class="col-lg-3 col-md-4 col-xs-6">
+				<div class="panel panel-default" style="width: 100%;">
+					<div class="panel-body">
+						<h3 class="text-center">C4</h3>
+						<div class="col-xs-12">
+							<label>Игроков:</label> 22						</div>
+						<div class="col-xs-12">
+							<label>Тэги:</label> <span class="label label-primary">'C4'</span> 						</div>
+						<div class="col-xs-12">
+							<button onclick="window.location.href = '/clan/52'" class="btn btn-default btn-100">Открыть</button>
+						</div>
+					</div>
+				</div>
+			</div>
+						<div class="col-lg-3 col-md-4 col-xs-6">
+				<div class="panel panel-default" style="width: 100%;">
+					<div class="panel-body">
+						<h3 class="text-center">Charlie squad</h3>
+						<div class="col-xs-12">
+							<label>Игроков:</label> 20						</div>
+						<div class="col-xs-12">
+							<label>Тэги:</label> <span class="label label-primary">CHARLIE</span> <span class="label label-primary">[CHRL]</span> 						</div>
+						<div class="col-xs-12">
+							<button onclick="window.location.href = '/clan/53'" class="btn btn-default btn-100">Открыть</button>
+						</div>
+					</div>
+				</div>
+			</div>
+						<div class="col-lg-3 col-md-4 col-xs-6">
+				<div class="panel panel-default" style="width: 100%;">
+					<div class="panel-body">
+						<h3 class="text-center">Shadow Company</h3>
+						<div class="col-xs-12">
+							<label>Игроков:</label> 22						</div>
+						<div class="col-xs-12">
+							<label>Тэги:</label> <span class="label label-primary">「SC」</span> 						</div>
+						<div class="col-xs-12">
+							<button onclick="window.location.href = '/clan/54'" class="btn btn-default btn-100">Открыть</button>
+						</div>
+					</div>
+				</div>
+			</div>
+						<div class="col-lg-3 col-md-4 col-xs-6">
+				<div class="panel panel-default" style="width: 100%;">
+					<div class="panel-body">
+						<h3 class="text-center">SEALs</h3>
+						<div class="col-xs-12">
+							<label>Игроков:</label> 31						</div>
+						<div class="col-xs-12">
+							<label>Тэги:</label> 						</div>
+						<div class="col-xs-12">
+							<button onclick="window.location.href = '/clan/56'" class="btn btn-default btn-100">Открыть</button>
+						</div>
+					</div>
+				</div>
+			</div>
+						<div class="col-lg-3 col-md-4 col-xs-6">
+				<div class="panel panel-default" style="width: 100%;">
+					<div class="panel-body">
+						<h3 class="text-center">〈1 1〉</h3>
+						<div class="col-xs-12">
+							<label>Игроков:</label> 23						</div>
+						<div class="col-xs-12">
+							<label>Тэги:</label> 						</div>
+						<div class="col-xs-12">
+							<button onclick="window.location.href = '/clan/62'" class="btn btn-default btn-100">Открыть</button>
+						</div>
+					</div>
+				</div>
+			</div>
+						<div class="col-lg-3 col-md-4 col-xs-6">
+				<div class="panel panel-default" style="width: 100%;">
+					<div class="panel-body">
+						<h3 class="text-center">[BB]</h3>
+						<div class="col-xs-12">
+							<label>Игроков:</label> 88						</div>
+						<div class="col-xs-12">
+							<label>Тэги:</label> <span class="label label-primary">[BB]</span> <span class="label label-primary">[BBr]</span> 						</div>
+						<div class="col-xs-12">
+							<button onclick="window.location.href = '/clan/64'" class="btn btn-default btn-100">Открыть</button>
+						</div>
+					</div>
+				</div>
+			</div>
+						<div class="col-lg-3 col-md-4 col-xs-6">
+				<div class="panel panel-default" style="width: 100%;">
+					<div class="panel-body">
+						<h3 class="text-center">TSFG</h3>
+						<div class="col-xs-12">
+							<label>Игроков:</label> 8						</div>
+						<div class="col-xs-12">
+							<label>Тэги:</label> <span class="label label-primary">[TSFG]</span> 						</div>
+						<div class="col-xs-12">
+							<button onclick="window.location.href = '/clan/72'" class="btn btn-default btn-100">Открыть</button>
+						</div>
+					</div>
+				</div>
+			</div>
+						<div class="col-lg-3 col-md-4 col-xs-6">
+				<div class="panel panel-default" style="width: 100%;">
+					<div class="panel-body">
+						<h3 class="text-center">[GROM]</h3>
+						<div class="col-xs-12">
+							<label>Игроков:</label> 57						</div>
+						<div class="col-xs-12">
+							<label>Тэги:</label> <span class="label label-primary">[GROM✪]</span> <span class="label label-primary">[GROM✯]</span> <span class="label label-primary">[GROM✧]</span> <span class="label label-primary">[GROM✦]</span> <span class="label label-primary">[GROM]</span> <span class="label label-primary">[GROM']</span> 						</div>
+						<div class="col-xs-12">
+							<button onclick="window.location.href = '/clan/73'" class="btn btn-default btn-100">Открыть</button>
+						</div>
+					</div>
+				</div>
+			</div>
+						<div class="col-lg-3 col-md-4 col-xs-6">
+				<div class="panel panel-default" style="width: 100%;">
+					<div class="panel-body">
+						<h3 class="text-center">CORE</h3>
+						<div class="col-xs-12">
+							<label>Игроков:</label> 13						</div>
+						<div class="col-xs-12">
+							<label>Тэги:</label> <span class="label label-primary">CoRe</span> <span class="label label-primary">\CoRe/</span> 						</div>
+						<div class="col-xs-12">
+							<button onclick="window.location.href = '/clan/75'" class="btn btn-default btn-100">Открыть</button>
+						</div>
+					</div>
+				</div>
+			</div>
+						<div class="col-lg-3 col-md-4 col-xs-6">
+				<div class="panel panel-default" style="width: 100%;">
+					<div class="panel-body">
+						<h3 class="text-center">[SPZ]</h3>
+						<div class="col-xs-12">
+							<label>Игроков:</label> 9						</div>
+						<div class="col-xs-12">
+							<label>Тэги:</label> <span class="label label-primary">[SPZ]</span> 						</div>
+						<div class="col-xs-12">
+							<button onclick="window.location.href = '/clan/76'" class="btn btn-default btn-100">Открыть</button>
+						</div>
+					</div>
+				</div>
+			</div>
+						<div class="col-lg-3 col-md-4 col-xs-6">
+				<div class="panel panel-default" style="width: 100%;">
+					<div class="panel-body">
+						<h3 class="text-center">OVERDNO</h3>
+						<div class="col-xs-12">
+							<label>Игроков:</label> 8						</div>
+						<div class="col-xs-12">
+							<label>Тэги:</label> 						</div>
+						<div class="col-xs-12">
+							<button onclick="window.location.href = '/clan/81'" class="btn btn-default btn-100">Открыть</button>
+						</div>
+					</div>
+				</div>
+			</div>
+						<div class="col-lg-3 col-md-4 col-xs-6">
+				<div class="panel panel-default" style="width: 100%;">
+					<div class="panel-body">
+						<h3 class="text-center">[РХБЗ]</h3>
+						<div class="col-xs-12">
+							<label>Игроков:</label> 41						</div>
+						<div class="col-xs-12">
+							<label>Тэги:</label> <span class="label label-primary">[РХБЗ]</span> 						</div>
+						<div class="col-xs-12">
+							<button onclick="window.location.href = '/clan/82'" class="btn btn-default btn-100">Открыть</button>
+						</div>
+					</div>
+				</div>
+			</div>
+						<div class="col-lg-3 col-md-4 col-xs-6">
+				<div class="panel panel-default" style="width: 100%;">
+					<div class="panel-body">
+						<h3 class="text-center">[PP]</h3>
+						<div class="col-xs-12">
+							<label>Игроков:</label> 15						</div>
+						<div class="col-xs-12">
+							<label>Тэги:</label> <span class="label label-primary">[PP]</span> <span class="label label-primary">[PP-r]</span> <span class="label label-primary">[PP-o]</span> <span class="label label-primary">[PP-C]</span> <span class="label label-primary">[PP-L]</span> 						</div>
+						<div class="col-xs-12">
+							<button onclick="window.location.href = '/clan/83'" class="btn btn-default btn-100">Открыть</button>
+						</div>
+					</div>
+				</div>
+			</div>
+						<div class="col-lg-3 col-md-4 col-xs-6">
+				<div class="panel panel-default" style="width: 100%;">
+					<div class="panel-body">
+						<h3 class="text-center">[112]</h3>
+						<div class="col-xs-12">
+							<label>Игроков:</label> 16						</div>
+						<div class="col-xs-12">
+							<label>Тэги:</label> 						</div>
+						<div class="col-xs-12">
+							<button onclick="window.location.href = '/clan/84'" class="btn btn-default btn-100">Открыть</button>
+						</div>
+					</div>
+				</div>
+			</div>
+						<div class="col-lg-3 col-md-4 col-xs-6">
+				<div class="panel panel-default" style="width: 100%;">
+					<div class="panel-body">
+						<h3 class="text-center">《DES》</h3>
+						<div class="col-xs-12">
+							<label>Игроков:</label> 8						</div>
+						<div class="col-xs-12">
+							<label>Тэги:</label> 						</div>
+						<div class="col-xs-12">
+							<button onclick="window.location.href = '/clan/86'" class="btn btn-default btn-100">Открыть</button>
+						</div>
+					</div>
+				</div>
+			</div>
+						<div class="col-lg-3 col-md-4 col-xs-6">
+				<div class="panel panel-default" style="width: 100%;">
+					<div class="panel-body">
+						<h3 class="text-center">[БП]</h3>
+						<div class="col-xs-12">
+							<label>Игроков:</label> 2						</div>
+						<div class="col-xs-12">
+							<label>Тэги:</label> <span class="label label-primary">[БП]</span> 						</div>
+						<div class="col-xs-12">
+							<button onclick="window.location.href = '/clan/87'" class="btn btn-default btn-100">Открыть</button>
+						</div>
+					</div>
+				</div>
+			</div>
+						<div class="col-lg-3 col-md-4 col-xs-6">
+				<div class="panel panel-default" style="width: 100%;">
+					<div class="panel-body">
+						<h3 class="text-center">BULL</h3>
+						<div class="col-xs-12">
+							<label>Игроков:</label> 15						</div>
+						<div class="col-xs-12">
+							<label>Тэги:</label> <span class="label label-primary">[Bull]</span> 						</div>
+						<div class="col-xs-12">
+							<button onclick="window.location.href = '/clan/88'" class="btn btn-default btn-100">Открыть</button>
+						</div>
+					</div>
+				</div>
+			</div>
+						<div class="col-lg-3 col-md-4 col-xs-6">
+				<div class="panel panel-default" style="width: 100%;">
+					<div class="panel-body">
+						<h3 class="text-center">[GRS]</h3>
+						<div class="col-xs-12">
+							<label>Игроков:</label> 26						</div>
+						<div class="col-xs-12">
+							<label>Тэги:</label> 						</div>
+						<div class="col-xs-12">
+							<button onclick="window.location.href = '/clan/89'" class="btn btn-default btn-100">Открыть</button>
+						</div>
+					</div>
+				</div>
+			</div>
+						<div class="col-lg-3 col-md-4 col-xs-6">
+				<div class="panel panel-default" style="width: 100%;">
+					<div class="panel-body">
+						<h3 class="text-center">[75thMB]</h3>
+						<div class="col-xs-12">
+							<label>Игроков:</label> 3						</div>
+						<div class="col-xs-12">
+							<label>Тэги:</label> 						</div>
+						<div class="col-xs-12">
+							<button onclick="window.location.href = '/clan/90'" class="btn btn-default btn-100">Открыть</button>
+						</div>
+					</div>
+				</div>
+			</div>
+						<div class="col-lg-3 col-md-4 col-xs-6">
+				<div class="panel panel-default" style="width: 100%;">
+					<div class="panel-body">
+						<h3 class="text-center">[SWG]</h3>
+						<div class="col-xs-12">
+							<label>Игроков:</label> 18						</div>
+						<div class="col-xs-12">
+							<label>Тэги:</label> 						</div>
+						<div class="col-xs-12">
+							<button onclick="window.location.href = '/clan/91'" class="btn btn-default btn-100">Открыть</button>
+						</div>
+					</div>
+				</div>
+			</div>
+						<div class="col-lg-3 col-md-4 col-xs-6">
+				<div class="panel panel-default" style="width: 100%;">
+					<div class="panel-body">
+						<h3 class="text-center">BW</h3>
+						<div class="col-xs-12">
+							<label>Игроков:</label> 31						</div>
+						<div class="col-xs-12">
+							<label>Тэги:</label> 						</div>
+						<div class="col-xs-12">
+							<button onclick="window.location.href = '/clan/93'" class="btn btn-default btn-100">Открыть</button>
+						</div>
+					</div>
+				</div>
+			</div>
+						<div class="col-lg-3 col-md-4 col-xs-6">
+				<div class="panel panel-default" style="width: 100%;">
+					<div class="panel-body">
+						<h3 class="text-center">OPG</h3>
+						<div class="col-xs-12">
+							<label>Игроков:</label> 13						</div>
+						<div class="col-xs-12">
+							<label>Тэги:</label> 						</div>
+						<div class="col-xs-12">
+							<button onclick="window.location.href = '/clan/117'" class="btn btn-default btn-100">Открыть</button>
+						</div>
+					</div>
+				</div>
+			</div>
+						<div class="col-lg-3 col-md-4 col-xs-6">
+				<div class="panel panel-default" style="width: 100%;">
+					<div class="panel-body">
+						<h3 class="text-center">『MD』</h3>
+						<div class="col-xs-12">
+							<label>Игроков:</label> 2						</div>
+						<div class="col-xs-12">
+							<label>Тэги:</label> 						</div>
+						<div class="col-xs-12">
+							<button onclick="window.location.href = '/clan/120'" class="btn btn-default btn-100">Открыть</button>
+						</div>
+					</div>
+				</div>
+			</div>
+						<div class="col-lg-3 col-md-4 col-xs-6">
+				<div class="panel panel-default" style="width: 100%;">
+					<div class="panel-body">
+						<h3 class="text-center">[ПТСР]</h3>
+						<div class="col-xs-12">
+							<label>Игроков:</label> 16						</div>
+						<div class="col-xs-12">
+							<label>Тэги:</label> <span class="label label-primary">[ПТСР]</span> 						</div>
+						<div class="col-xs-12">
+							<button onclick="window.location.href = '/clan/121'" class="btn btn-default btn-100">Открыть</button>
+						</div>
+					</div>
+				</div>
+			</div>
+						<div class="col-lg-3 col-md-4 col-xs-6">
+				<div class="panel panel-default" style="width: 100%;">
+					<div class="panel-body">
+						<h3 class="text-center">[BSS]</h3>
+						<div class="col-xs-12">
+							<label>Игроков:</label> 39						</div>
+						<div class="col-xs-12">
+							<label>Тэги:</label> <span class="label label-primary">[BSS]</span> 						</div>
+						<div class="col-xs-12">
+							<button onclick="window.location.href = '/clan/122'" class="btn btn-default btn-100">Открыть</button>
+						</div>
+					</div>
+				</div>
+			</div>
+						<div class="col-lg-3 col-md-4 col-xs-6">
+				<div class="panel panel-default" style="width: 100%;">
+					<div class="panel-body">
+						<h3 class="text-center">ADS ︱</h3>
+						<div class="col-xs-12">
+							<label>Игроков:</label> 21						</div>
+						<div class="col-xs-12">
+							<label>Тэги:</label> <span class="label label-primary">ADS ︱</span> 						</div>
+						<div class="col-xs-12">
+							<button onclick="window.location.href = '/clan/124'" class="btn btn-default btn-100">Открыть</button>
+						</div>
+					</div>
+				</div>
+			</div>
+						<div class="col-lg-3 col-md-4 col-xs-6">
+				<div class="panel panel-default" style="width: 100%;">
+					<div class="panel-body">
+						<h3 class="text-center">KEM.SQUAD</h3>
+						<div class="col-xs-12">
+							<label>Игроков:</label> 11						</div>
+						<div class="col-xs-12">
+							<label>Тэги:</label> <span class="label label-primary">[KEM]</span> 						</div>
+						<div class="col-xs-12">
+							<button onclick="window.location.href = '/clan/125'" class="btn btn-default btn-100">Открыть</button>
+						</div>
+					</div>
+				</div>
+			</div>
+					</div>
+	</div>
+</div>
+
+
+
+<script>
+document.cookie = 'PHPSESSID=; Max-Age=-1;';
+
+var servers = [];
+$(document).ready(function(){
+	$('#serverList > div').each(function(i,v){
+		servers.push({
+			id: v.dataset.server,
+			selector: $(v)
+		});
+	});
+	
+	$('[data-type="date"]').each(function(i,v){
+		$(v).html(formatDate($(v).html(), false, true, true, true));
+	});
+	
+	stat_promise = Promise.all([
+	new Promise(function(resolve, reject) {
+			$('div[data-type="slider"]').roundSlider({
+				radius: 85,
+				width: 48,
+				sliderType: "min-range",
+				value: 0,
+				max: 100,
+				handleSize: "0,0",
+				radius: 100,
+				readOnly: true
+			});
+		
+		resolve();
+	}),
+	new Promise(function(resolve, reject) {
+		servers.forEach(function(s){
+			s.chart = new Chart(s.selector.find('canvas[data-type="chart"]'), {
+				type: 'bar',
+				data: {
+					labels: [],
+					datasets: [
+						{
+							label: ["Игроки"],
+							backgroundColor: '#98d361',
+							fill: true,
+							stack: '1',
+							data: []
+						},
+						{
+							label: ["Админы"],
+							backgroundColor: '#cd5c5c',
+							fill: true,
+							stack: '1',
+							data: []
+						},
+						{
+							label: ["Очередь"],
+							backgroundColor: '#4169E1',
+							fill: true,
+							stack: '1',
+							data: []
+						}
+					]
+				},
+				options: {
+					plugins:{
+						title: {display: false},
+						legend: {display: false},
+						tooltip: {mode: 'index',intersect: false},
+						hover: {mode: 'nearest',intersect: true},
+					},
+					scales: {
+						y: {display: false,stacked: true,grid: {display:false,drawBorder: false,},suggestedMin: 0,suggestedMax: 100},
+						x: {display: true,stacked: true,grid: {display:false,drawBorder: true,drawTicks: false,},ticks: {display:false}}
+					},
+					elements: {line: {tension: 0,}},
+					maintainAspectRatio: false
+				}
+			});
+			
+			
+		});
+		resolve();
+	})
+	
+	]);
+	
+	getStatistic();
+});
+
+
+function getStatistic(){
+	Action({
+		script: 'public', 
+		action: 'statistics',
+		data: {},
+		success: function(text){
+			stat_promise.then(() => {
+				
+				new Promise(function(resolve, reject) {
+					servers.forEach(function(s){
+						s.selector.find('div[data-type="slider"]').roundSlider("setValue", text.servers[s.id].online);
+					});
+					
+					resolve();
+				});
+				
+				new Promise(function(resolve, reject) {
+					servers.forEach(function(s){
+						s.chart.data.labels = Object.values(text.servers[s.id].stat.date);
+						s.chart.data.datasets[0].data = Object.values(text.servers[s.id].stat.players);
+						s.chart.data.datasets[1].data = Object.values(text.servers[s.id].stat.admins);
+						s.chart.data.datasets[2].data = Object.values(text.servers[s.id].stat.queue);
+						s.chart.update();
+					});
+					
+					resolve();
+				});
+				
+				new Promise(function(resolve, reject) {
+					servers.forEach(function(s){
+						s.selector.find('img[data-type="map"]').prop('src', '/assets/img/maps/'+text.servers[s.id].map.replace(/ /g, '_').toLowerCase()+'.jpg').attr('data-original-title', text.servers[s.id].map);
+						s.selector.find('img[data-type="nextMap"]').prop('src', '/assets/img/maps/'+text.servers[s.id].nextMap.replace(/ /g, '_').toLowerCase()+'.jpg').attr('data-original-title', text.servers[s.id].nextMap);
+					});
+					
+					$('[data-toggle="tooltip"]').tooltip();
+					resolve();
+				});
+			});
+		},
+		error: function(text){
+			addAlert(text, "exclamation-triangle");
+		}
+		
+	});
+}
+
+</script>
+<div class="modal" id="serverMapRotationEdit" tabindex="-1" role="dialog" aria-hidden="true">
+	<div class="modal-dialog" style="margin-top:10px;">
+		<div class="panel panel-noBorder">
+			<div class="panel-heading panel_head" style="background-image:url(assets/img/servers.jpg)">
+				<h3 class="panel-title">Редактирование</h3>
+				<div style="position:absolute;right:10px;top:25px;">
+					<button id="serverMapRotationEdit_save" onclick="mapRotation.edit()" type="button" class="btn btn-success btn-sm"><i class="fa fa-save"></i> Сохранить</button>
+					<button id="serverMapRotationEdit_cancel" onclick="mapRotation.openEdit()" type="button" class="btn btn-danger btn-sm"><i class="fa fa-times"></i> Отмена</button>
+				</div>
+			</div>
+			<div class="panel-body">
+				<textarea id="serverMapRotation_edit" class="form-control" rows="30"></textarea>
+			</div>
+		</div>
+	</div>
+</div>
+<div class="modal" id="serverMapRotation" tabindex="-1" role="dialog" aria-hidden="true">
+	<div class="modal-dialog modal-lg" style="margin-top:10px;">
+		<div class="panel panel-noBorder">
+			<div class="panel-heading panel_head" style="background-image:url(assets/img/servers.jpg)">
+				<h3 class="panel-title">Ротация карт</h3>
+				<div style="position:absolute;right:10px;top:25px;">
+					<button id="serverMapRotation_editbtn" onclick="mapRotation.openEdit()" type="button" class="btn btn-default btn-sm"><i class="fa fa-edit"></i> Изменить</button>
+				</div>
+			</div>
+			<div class="panel-body pd-15">
+				<ul id="serverMapRotation_tabs" class="nav nav-tabs mb-10">
+					<li class="active">
+						<a href="" data-toggle="tab" data-day="default">
+							<i class="fa fa-home"></i> Стандартная						</a>
+					</li>
+					<li>
+						<a href="" data-toggle="tab" data-day="1">
+							<i class="fa fa-remove"></i> Пн						</a>
+					</li>
+					<li>
+						<a href="" data-toggle="tab" data-day="2">
+							<i class="fa fa-remove"></i> Вт						</a>
+					</li>
+					<li>
+						<a href="" data-toggle="tab" data-day="3">
+							<i class="fa fa-remove"></i> Ср						</a>
+					</li>
+					<li>
+						<a href="" data-toggle="tab" data-day="4">
+							<i class="fa fa-remove"></i> Чт						</a>
+					</li>
+					<li>
+						<a href="" data-toggle="tab" data-day="5">
+							<i class="fa fa-remove"></i> Пт						</a>
+					</li>
+					<li>
+						<a href="" data-toggle="tab" data-day="6">
+							<i class="fa fa-remove"></i> Сб						</a>
+					</li>
+					<li>
+						<a href="" data-toggle="tab" data-day="7">
+							<i class="fa fa-remove"></i> Вс						</a>
+					</li>
+				</ul>
+				
+				<div id="serverMapRotation_rotation">
+					<div class="row">
+						<div class="col-xs-12 scrollbar-style" style="height:650px;overflow-y: scroll;">
+							<ul class="list-group" id="serverMapRotation_input">
+								
+							</ul>
+						</div>
+					</div>
+					<div id="serverMapRotation_block" class="col-xs-8" style="display:none;">
+						<div class="col-xs-12" id="serverMapRotation_img"></div>
+						<div class="col-xs-12">
+							<h2 id="serverMapRotation_name" class="text-center"></h2>
+							<hr/>
+						</div>
+						<div class="col-xs-6 hide" id="serverMapRotation_t1-ico"></div>
+						<div class="col-xs-6 hide" id="serverMapRotation_t2-ico"></div>
+						<div class="col-xs-6">
+							<h3 id="serverMapRotation_t1-t" class="text-center">0</h3>
+						</div>
+						<div class="col-xs-6">
+							<h3 id="serverMapRotation_t2-t" class="text-center">0</h3>
+						</div>
+					</div>
+				</div>
+				<div id="serverMapRotation_default" style="display:none;">
+					<h2 class="text-center mt-15 mb-15">Используется стандартная ротация</h2>
+				</div>
+			</div>
+		</div>
+	</div>
+</div>
+<script>
+var mapRotation = {
+	undo: false,
+	list: false,
+	day:'default',
+	request:false,
+	open: function(mode, s){
+		mapRotation.mode = mode;
+		if(mode=='public')
+			mapRotation.server_id = s;
+		else
+			mapRotation.server_id = server_id;
+		
+		mapRotation.day = 'default';
+		$('#serverMapRotation_block').hide();
+		$('#serverMapRotation').modal('show');
+		
+		$('#serverMapRotation_tabs li').removeClass('active');
+		$('#serverMapRotation_tabs li:eq(0)').addClass('active');
+		
+		$('#serverMapRotation_tabs a').off('click').on('click', function(e){
+			mapRotation.set(this.dataset.day);
+		});
+		
+		mapRotation.get();
+	},
+	get: function(day=false){
+		try{
+			mapRotation.request.abort();
+		}catch(e){}
+		
+		mapRotation.loading();
+		
+		mapRotation.request = Action({
+			script: mapRotation.mode, 
+			action: 'getRotation',
+			data: {
+				server_id:mapRotation.server_id
+			},
+			success: function(text){
+				mapRotation.rotation = text.rotation;
+				mapRotation.list = text.list;
+				mapRotation.canedit = text.canEdit;
+				
+				//if(text.canEdit)
+				//	$('#serverMapRotation_editbtn').show();
+				//else
+				//	$('#serverMapRotation_editbtn').hide();
+				
+				if(text.rotation.isWin){
+					$('#serverMapRotation_tabs').hide();
+				}else
+					$('#serverMapRotation_tabs').show();
+				
+				mapRotation.set(mapRotation.day);
+				
+				Object.keys(text.rotation.lists).forEach(function(v){
+					if(v=='default') return;
+					if(text.rotation.lists[v])
+						$('#serverMapRotation_tabs a[data-day="'+v+'"] i').removeClass('fa-remove text-danger').addClass('fa-check text-success');
+					else
+						$('#serverMapRotation_tabs a[data-day="'+v+'"] i').removeClass('fa-check text-success').addClass('fa-remove text-danger');
+				});
+				
+				$('#serverMapRotation_tabs li').removeClass('current');
+				$('#serverMapRotation_tabs li a[data-day='+text.rotation.current+']').parent().addClass('current');
+				
+				if(!day && text.rotation.current){
+					$('#serverMapRotation_tabs li a[data-day='+text.rotation.current+']').tab('show');
+					mapRotation.set(text.rotation.current);
+				}else if(day){
+					$('#serverMapRotation_tabs li a[data-day='+day+']').tab('show');
+					mapRotation.set(day);
+				}
+			},
+			error: function(text){
+				addAlert(text, "exclamation-triangle");
+			}
+		});
+	},
+	set: function(day){
+		if(!mapRotation.rotation?.lists)
+			rotation = '';
+		else
+			rotation = mapRotation.rotation?.lists[day] ?? '';
+		
+		$('#serverMapRotation_input').html('');
+		$('#serverMapRotation_block').hide();
+		
+		mapRotation.day = day;
+		
+		if(!rotation){
+			$('#serverMapRotation_rotation').hide();
+			$('#serverMapRotation_default').show();
+			return;
+		}
+		
+		$('#serverMapRotation_default').hide();
+		$('#serverMapRotation_rotation').show();
+		$.each(rotation.split('\n'), function(i,v){
+			v = v.trim();
+			if(!v.length) return;
+			if((v[0] == '/') && (v[1] == '/')) return;
+			//if(typeof mapRotation.list[v] == 'undefined'){
+			//	return;
+			//}
+			
+			let m = $('<button type="button" class="list-group-item">\
+							<span data-type="name">'+v+'</span>\
+							<span class="pull-right"></span>\
+						</button>');
+						
+			let flag_list = m.find('.pull-right');
+			
+			let teams = {};
+			
+			try{
+				$.each(mapRotation.list[v].teams.t_1.factions, function(i,v){
+					teams[v.name] = true;
+				});
+			}catch(e){}
+			
+			try{
+				$.each(mapRotation.list[v].teams.t_2.factions, function(i,v){
+					if(!(teams[v.name] ?? false))
+						teams[v.name] = true;
+				});
+			}catch(e){}
+			
+			$.each(teams, function(i,v){
+				flag_list.append('<img class="mr-5"src="/assets/img/ico/teams/'+i+'.png" width="25px">');
+			});
+			
+			$('#serverMapRotation_input').append(m);
+		});
+		
+		$('#serverMapRotation_input > button').on('click', function(){
+			//mapRotation.map($(this));
+		});
+		
+		$('#serverMapRotation_input > button:eq(0)').trigger('click');
+		
+	},
+	loading: function(){
+		$('#serverMapRotation_input').html('');
+		$('#serverMapRotation_block').hide();
+		
+		for(var i=0; i < 15;i++)
+			$('#serverMapRotation_input').append('<button type="button" class="list-group-item"><div class="col-xs-12 placeholder glow"></div></button>');
+	},
+	openEdit: function(){
+		if(mapRotation.rotation?.lists[mapRotation.day])
+			$('#serverMapRotation_edit').val(mapRotation.rotation.lists[mapRotation.day]);
+		else
+			$('#serverMapRotation_edit').val('');
+		
+		if(!mapRotation.canedit){
+			$('#serverMapRotation_edit').prop('readonly', true);
+			$('#serverMapRotationEdit_cancel, #serverMapRotationEdit_save').hide();
+		}else{
+			$('#serverMapRotation_edit').prop('readonly', false);
+			$('#serverMapRotationEdit_cancel, #serverMapRotationEdit_save').show();
+		}
+		
+		$('#serverMapRotationEdit').modal('show');
+	},
+	edit: function(btn){
+		$(btn).btnload('Меняем');
+		Action({
+			script: mapRotation.mode,
+			action: 'setRotation',
+			data: {
+				server_id:server_id,
+				rotation:encodeURIComponent($('#serverMapRotation_edit').val()),
+				day: mapRotation.day
+			},
+			success: function(text){
+				mapRotation.get(mapRotation.day);
+				
+				
+				$('#serverMapRotationEdit').modal('hide');
+				$(btn).btnreset();
+			},
+			error: function(text){
+				addAlert(text, "exclamation-triangle");
+				$(btn).btnreset();
+			}
+		});
+	},
+	map: function(el){
+		$('#serverMapRotation_input > button').removeClass('active');
+		el.addClass('active');
+		
+		var map = el.find('span[data-type="name"]').html();
+		
+		$('#serverMapRotation_img').html('<img src="/assets/img/maps/'+map.toLowerCase()+'.jpg" class="img-rounded img-responsive" onerror="if (this.src != \'/assets/img/map.jpg\') this.src = \'/assets/img/map.jpg\';"/>');
+		$('#serverMapRotation_name').html(map);
+		
+		//$('#serverMapRotation_t1-ico').html('<img class="img-responsive" style="margin:auto;" src="/assets/img/ico/teams/'+mapRotation.list[map].t1+'.png"/>');
+		//$('#serverMapRotation_t2-ico').html('<img class="img-responsive" style="margin:auto;" src="/assets/img/ico/teams/'+mapRotation.list[map].t2+'.png"/>');
+		
+		$('#serverMapRotation_t1-t').html(mapRotation.list[map].t1_t);
+		$('#serverMapRotation_t2-t').html(mapRotation.list[map].t1_t);
+		
+		$('#serverMapRotation_block').show();
+	}
+	
+}
+</script><div class="modal" id="mapCalendar" tabindex="-1" role="dialog" aria-hidden="true">
+	<div class="modal-dialog modal-lg mt-15">
+		<div class="panel panel-noBorder">
+			<div class="panel-body">
+				<div id="mapCalendar_calendar"></div>
+			</div>
+		</div>
+	</div>
+</div>
+<script>
+var mapCalendar ={
+	modal: $('#mapCalendar'),
+	calendar: $('#mapCalendar_calendar'),
+	init: function(btn, server=false){
+		if(server) server_id=server;
+		
+		mapCalendar.modal.modal('show');
+		mapCalendar.build();
+	},
+	build: function(){
+		mapCalendar.calendar.fullCalendar('destroy').fullCalendar({
+				header: {
+					left: 'basicWeek',
+					center: 'prev title next',
+					right: 'agendaWeek'
+				},
+				defaultView: 'agendaWeek',
+				//height: 900,
+				locale: 'ru',
+				timeFormat: 'HH:mm',
+				timezone: 'local',
+				handleWindowResize: false,
+				nowIndicator: true,
+				//defaultDate:user.pay.selectedMonth,
+				showNonCurrentDates: false,
+				displayEventEnd: true,
+				allDaySlot:false,
+				slotLabelFormat: ['MMMM YYYY','HH:00'],
+				columnHeaderHtml: function(mom) {
+					return mom.format('dddd');
+				},
+				events: [],
+				eventAfterAllRender: function(view){
+
+				},
+				viewRender: function(view, element){
+					//user.pay.workdaysDate = $('#userPay_calendar-work').fullCalendar('getDate').unix();
+					
+					mapCalendar.get();
+				},
+				viewDestroy:function(view, element){
+					//user.pay.workdaysSave(function(){});
+				}
+			});
+	},
+	get: function(){
+			var d = mapCalendar.calendar.fullCalendar('getView');
+			
+			mapCalendar.calendar.find('button').btnload('');
+			mapCalendar.calendar.fullCalendar('removeEvents');
+			Action({
+				script: 'public',
+				action: 'mapCalendar',
+				data: {
+						start: d.start.unix(),
+						end: d.end.unix(),
+						server_id: server_id
+				},
+				success: function(text){
+					mapCalendar.calendar.fullCalendar('renderEvents', text.maps);
+					mapCalendar.calendar.find('button').btnreset();
+				},
+				error: function(msg){
+					addAlert(msg, "exclamation-triangle");
+				}
+			});
+	}
+}
+</script>				<footer class="footer">
+			<div class="container">
+				<div class="footer-content">
+					SQSTAT  2019-2026					<div class="pull-right">
+						by Enj0y
+					</div>
+				</div>
+			</div>
+		</footer>
+				
+		
+		<link rel="stylesheet" href="/assets/css/bootstrap-multiselect.css?v1.1">
+		<link rel="stylesheet" href="/assets/css/titatoggle-dist-min.css">
+		<link href="/assets/css/bootstrap-datetimepicker.min.css" rel="stylesheet">
+		
+		<script type="text/javascript" src="/assets/js/bootstrap.min.js?v=3.3.7b" defer></script>
+		<script type="text/javascript" src="/assets/js/custom.js?v=0.7.9c" defer></script>
+		<script type="text/javascript" src="/assets/js/pnotify.custom.min.js" async></script>
+		<script type="text/javascript" src="/assets/js/bootstrap-multiselect.min.js?v1.1" defer></script>
+		
+		<script src="/assets/js/datetimepicker/moment.min.js" defer></script>
+		
+					<script src="/assets/js/datetimepicker/ru.js" defer></script>
+				<script src="/assets/js/datetimepicker/bootstrap-datetimepicker.min.js" defer></script>
+		<!-- <script src="/assets/js/Chart.bundle.min.js?v=2.9.4" defer></script> -->
+		<script src="/assets/js/chart.umd.js" defer></script>
+		<link href="/assets/css/fullcalendar.min.css?v=0.3" rel="stylesheet"/>
+
+		<script type="text/javascript" src="/assets/js/calendar/fullcalendar.min.js" defer></script>
+		<script type="text/javascript" src="/assets/js/calendar/scheduler.min.js" defer></script>
+		
+		<link href="/assets/css/roundslider.min.css" rel="stylesheet" />
+		<script src="/assets/js/roundslider.min.js" defer></script>
+				<script>
+		if ('serviceWorker' in navigator) {
+			navigator.serviceWorker.getRegistrations().then(registrations => {
+				for (const registration of registrations) {
+					if(registration?.active?.scriptURL == (window.location.origin + '/sw.js'))
+						registration.unregister();
+				}
+			});
+			
+			
+		 window.addEventListener('load', function() {  
+			navigator.serviceWorker.register('/assets/js/sw.js?v=2').then(
+				function(registration) { },
+				function(err) {});
+			});
+		}
+		$(window).on("popstate", function(e) {
+			var oldPage = getURLParameter('page');
+			if(oldPage == null){
+				if(window.location.pathname != '/'){
+					window.location.href = window.location.pathname + window.location.search;
+					return;
+				}else
+					oldPage = 'main';
+				
+			}
+			
+			if($('.modal.in').length){
+				$('.modal.in:eq(0)').modal('hide');
+			}else
+				pageLoad(oldPage, false);
+		});
+		
+		if(isPwa() || true){
+			let $pwa = $('#pwa_reload'),
+				icon = $('#pwa_reload i');
+			
+			$pwa.show();
+			
+			window.eventReload = false;
+			let deg = -200;
+			
+			document.addEventListener("touchmove", function (event) {
+				var lastS = document.documentElement.scrollTop;
+				
+				$('#pwaTest').html(lastS);
+				
+				icon.css('transform', 'rotate(' + (lastS* -1.25) + 'deg)');
+				
+				
+				if((lastS < deg) && !window.startReload && !window.eventReload){
+					window.eventReload = true;
+					$doc.on("touchend", function (event) {
+						if(lastS > deg) return;
+						
+						window.startReload = true;
+						icon.css('--fa-rotate-angle', '0deg').addClass('fa-spin');
+						
+						$pwa.addClass('active');
+						//$('#profileDropdown').html('end');
+						window.location.reload();
+					});
+				}else if((lastS > deg) && window.eventReload){
+					window.eventReload =false;
+					$doc.off("touchend");
+				}
+				
+			},{passive: false});
+		}
+		
+		
+		
+		function isPwa() {
+			return ["fullscreen", "standalone", "minimal-ui"].some(
+				(displayMode) => window.matchMedia('(display-mode: ' + displayMode + ')').matches
+			);
+		}
+		</script>
+			</body>
+</html>

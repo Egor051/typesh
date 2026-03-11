@@ -90,10 +90,6 @@ class SqstatParser:
             len(soup.select("div.block-box-content")),
         )
         LOGGER.info(
-            "BeautifulSoup hidden inputs count: %s",
-            len(soup.select('input[type="hidden"][value]')),
-        )
-        LOGGER.info(
             "BeautifulSoup map images count: %s",
             len(soup.select('img[data-type="map"]')),
         )
@@ -108,7 +104,7 @@ class SqstatParser:
         raas_card = self._find_card_by_title(cards, "RAAS/AAS")
         spec_card = self._find_card_by_title(cards, "SPEC")
 
-        # fallback по порядку карточек на странице
+        # fallback по порядку на странице
         if raas_card is None and len(cards) >= 1:
             raas_card = cards[0]
 
@@ -145,16 +141,11 @@ class SqstatParser:
         for box in soup.select("div.block-box"):
             text = self._compact_text(box.get_text(" ", strip=True)).upper()
 
-            # Отбираем именно карточки серверов, у которых есть блок "Текущая"
+            # серверные карточки содержат карту и блок "Текущая"
             if "ТЕКУЩАЯ" not in text and "CURRENT" not in text:
                 continue
 
-            content = box.select_one("div.block-box-content")
-            if content is None:
-                continue
-
-            # Онлайн на странице хранится в hidden input value="..."
-            if not content.select_one('input[type="hidden"][value]'):
+            if box.select_one('img[data-type="map"]') is None:
                 continue
 
             cards.append(box)
