@@ -23,21 +23,42 @@ class SqstatParser:
         self.timeout_seconds = timeout_seconds
 
     def fetch_html(self) -> str:
-        response = requests.get(
-            self.base_url,
-            timeout=self.timeout_seconds,
-            headers={
-                "User-Agent": (
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/122.0.0.0 Safari/537.36"
-                )
-            },
-        )
+        session = requests.Session()
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/122.0.0.0 Safari/537.36"
+            )
+        }
+
+        response = session.get(self.base_url, timeout=self.timeout_seconds, headers=headers)
         response.raise_for_status()
-        if not response.text.strip():
+
+        html = response.text
+        if not html.strip():
             raise ValueError("Received empty HTML response")
-        return response.text
+
+        cookie_match = re.search(
+            r"document\.cookie\s*=\s*'([^=]+)=([^;]+);",
+            html,
+            re.IGNORECASE,
+        )
+
+        if cookie_match:
+            cookie_name = cookie_match.group(1).strip()
+            cookie_value = cookie_match.group(2).strip()
+            LOGGER.info("Received JS cookie challenge: %s", cookie_name)
+
+            session.cookies.set(cookie_name, cookie_value)
+            response = session.get(self.base_url, timeout=self.timeout_seconds, headers=headers)
+            response.raise_for_status()
+            html = response.text
+
+        if not html.strip():
+            raise ValueError("Received empty HTML response after cookie challenge")
+
+        return html
 
     def parse(self, html: str) -> WidgetSnapshot:
         soup = BeautifulSoup(html, "html.parser")
