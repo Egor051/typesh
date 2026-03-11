@@ -4,13 +4,13 @@
   "last_snapshot": {
     "raas_aas": {
       "server_name": "RAAS/AAS",
-      "online": "1773258390",
-      "map_name": "",
+      "online": "0",
+      "map_name": "Gorodok AAS v1",
       "map_image_url": ""
     },
     "spec": {
       "server_name": "SPEC",
-      "online": "1773258390",
+      "online": "",
       "map_name": "",
       "map_image_url": ""
     }

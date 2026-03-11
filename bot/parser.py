@@ -68,11 +68,11 @@ class SqstatParser:
 
         game_lines = self._extract_game_lines(compact_text)
         LOGGER.info("Found %s parsed game lines", len(game_lines))
-        for idx, line in enumerate(game_lines[:5], start=1):
+        for idx, line in enumerate(game_lines[:10], start=1):
             LOGGER.info("Game line %s: %s", idx, line)
 
-        raas_line = self._find_line_for_mode(game_lines, "RAAS/AAS")
-        spec_line = self._find_line_for_mode(game_lines, "SPEC")
+        raas_line = self._find_raas_line(game_lines)
+        spec_line = self._find_spec_line(game_lines)
 
         LOGGER.info("Matched RAAS/AAS line: %s", raas_line or "<not found>")
         LOGGER.info("Matched SPEC line: %s", spec_line or "<not found>")
@@ -119,14 +119,39 @@ class SqstatParser:
 
         return matches
 
-    def _find_line_for_mode(self, lines: list[str], mode: str) -> str:
+    def _find_raas_line(self, lines: list[str]) -> str:
         for line in lines:
-            upper = line.upper()
-            if mode == "RAAS/AAS" and "RAAS/AAS" in upper:
-                return line
-            if mode == "SPEC" and re.search(r"\bSPEC\b", upper):
+            if "RAAS/AAS" in line.upper():
                 return line
         return ""
+
+    def _find_spec_line(self, lines: list[str]) -> str:
+        # На breaking.proxy.sqstat.ru второй сервер в логах у тебя приходит как
+        # "SEC 26 ... FW/MDC TRAINING ...", а не как literal "SPEC".
+        candidates = []
+
+        for line in lines:
+            upper = line.upper()
+
+            if "RAAS/AAS" in upper:
+                continue
+
+            score = 0
+            if "FW/MDC TRAINING" in upper:
+                score += 10
+            if re.search(r"\bSEC\s*26\b", upper):
+                score += 5
+            if re.search(r"\bSPEC\b", upper):
+                score += 3
+
+            if score > 0:
+                candidates.append((score, line))
+
+        if not candidates:
+            return ""
+
+        candidates.sort(key=lambda x: x[0], reverse=True)
+        return candidates[0][1]
 
     def _build_snapshot(self, mode: str, line: str) -> ServerSnapshot:
         if not line:
@@ -143,30 +168,33 @@ class SqstatParser:
         )
 
     def _extract_online_from_line(self, line: str) -> str:
-        after_time = re.split(r"\b\d{9,10}\b\s*-\s*\b\d{9,10}\b", line, maxsplit=1)
-        if len(after_time) < 2:
+        m = re.search(
+            r"\b\d{9,10}\b\s*-\s*\b\d{9,10}\b\s+(.+?)\s+(\d{1,3})\s+(.+?)\s+(\d{1,3})\s*$",
+            line,
+            re.IGNORECASE,
+        )
+        if not m:
             return ""
 
-        tail = after_time[1]
-        nums = [int(x) for x in re.findall(r"\b\d{1,3}\b", tail)]
-        nums = [n for n in nums if 0 <= n <= 127]
-
-        if not nums:
-            return ""
-
-        return str(max(nums))
+        team1 = int(m.group(2))
+        team2 = int(m.group(4))
+        return str(team1 + team2)
 
     def _extract_map_from_line(self, line: str, mode: str) -> str:
         if mode == "RAAS/AAS":
             parts = re.split(r"\bRAAS/AAS\b", line, maxsplit=1, flags=re.IGNORECASE)
         else:
-            parts = re.split(r"\bSPEC\b", line, maxsplit=1, flags=re.IGNORECASE)
+            parts = re.split(r"\bFW/MDC TRAINING\b|\bSPEC\b", line, maxsplit=1, flags=re.IGNORECASE)
 
         if not parts:
             return ""
 
         map_name = self._compact_text(parts[0])
 
+        # Убираем служебный префикс SEC 26 у второго сервера
+        map_name = re.sub(r"^\s*SEC\s*\d+\s+", "", map_name, flags=re.IGNORECASE)
+
+        # Убираем хвост вида "#1"
         map_name = re.sub(r"\s+#\d+\s*$", "", map_name).strip()
 
         return map_name
