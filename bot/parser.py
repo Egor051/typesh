@@ -172,55 +172,74 @@ class SqstatParser:
         )
 
     def _extract_online(self, card: Tag) -> str:
+        text = card.get_text(" ", strip=True)
+        compact = " ".join(text.split())
+
+        patterns = [
+            r"Онлайн[:\s]+(\d+\s*/\s*\d+)",
+            r"Онлайн[:\s]+(\d+)",
+            r"Players?[:\s]+(\d+\s*/\s*\d+)",
+            r"Players?[:\s]+(\d+)",
+        ]
+
+        for pattern in patterns:
+            match = re.search(pattern, compact, re.IGNORECASE)
+            if match:
+                return match.group(1)
+
         selectors = [
-            ".chart [class*='online']",
-            ".stats [class*='online']",
-            "[class*='player'] [class*='value']",
             "[class*='online']",
+            "[class*='player']",
+            "[class*='stats']",
             ".chart .value",
-            "[class*='count']",
-            "[class*='stat']",
-            "span",
-            "div",
         ]
 
         for selector in selectors:
             for node in card.select(selector):
-                text = node.get_text(" ", strip=True)
-                if not text:
+                value = " ".join(node.get_text(" ", strip=True).split())
+                if not value:
                     continue
 
-                match = re.search(r"\b\d+\s*/\s*\d+\b", text)
+                match = re.search(r"\b\d+\s*/\s*\d+\b", value)
                 if match:
                     return match.group(0)
 
-                match = re.search(r"\b\d+\b", text)
+                match = re.search(r"\b\d+\b", value)
                 if match:
                     return match.group(0)
 
-        tokens = [token for token in card.get_text(" ", strip=True).split() if any(ch.isdigit() for ch in token)]
-        return min(tokens, key=len) if tokens else ""
+        return ""
 
     def _extract_map(self, card: Tag) -> tuple[str, str]:
+        text = " ".join(card.get_text(" ", strip=True).split())
+
+        map_patterns = [
+            r"Карта[:\s]+([A-Za-z0-9_\-]+)",
+            r"Map[:\s]+([A-Za-z0-9_\-]+)",
+        ]
+
+        for pattern in map_patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                return match.group(1), ""
+
         map_img = (
-            card.select_one("img[data-type='map']")
-            or card.select_one("img[alt*='map' i]")
-            or card.select_one("img[title*='map' i]")
-            or card.select_one("img")
+                card.select_one("img[data-type='map']")
+                or card.select_one("img[alt*='map' i]")
+                or card.select_one("img[title*='map' i]")
         )
 
-        if map_img is None:
-            LOGGER.warning("Map image was not found for card")
-            return "", ""
+        if map_img is not None:
+            map_name = (
+                    (map_img.get("data-original-title") or "").strip()
+                    or (map_img.get("alt") or "").strip()
+                    or (map_img.get("title") or "").strip()
+            )
+            src = (map_img.get("src") or "").strip()
+            map_image_url = urljoin(f"{self.base_url}/", src) if src else ""
+            return map_name, map_image_url
 
-        map_name = (
-            (map_img.get("data-original-title") or "").strip()
-            or (map_img.get("alt") or "").strip()
-            or (map_img.get("title") or "").strip()
-        )
-        src = (map_img.get("src") or "").strip()
-        map_image_url = urljoin(f"{self.base_url}/", src) if src else ""
-        return map_name, map_image_url
+        return "", ""
 
     def _log_candidate_blocks(self, cards: list[Tag], label: str) -> None:
         for index, card in enumerate(cards[:10], start=1):
