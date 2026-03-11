@@ -125,12 +125,28 @@ class SqstatParser:
             normalized = title.upper()
 
             if any(keyword.upper() in normalized for keyword in keywords):
+                LOGGER.info(
+                    "Matched %s by title: %s",
+                    "/".join(keywords),
+                    " ".join(card.get_text(" ", strip=True).split())[:700],
+                )
                 return card
 
             full_text = card.get_text(" ", strip=True).upper()
             if keywords == RAAS_KEYWORDS and ("RAAS" in full_text or "AAS" in full_text):
+                LOGGER.info(
+                    "Matched %s by text: %s",
+                    "/".join(keywords),
+                    " ".join(card.get_text(" ", strip=True).split())[:700],
+                )
                 return card
+
             if keywords == SPEC_KEYWORDS and "SPEC" in full_text:
+                LOGGER.info(
+                    "Matched %s by text: %s",
+                    "/".join(keywords),
+                    " ".join(card.get_text(" ", strip=True).split())[:700],
+                )
                 return card
 
         return None
@@ -163,6 +179,14 @@ class SqstatParser:
 
         online = self._extract_online(card)
         map_name, map_url = self._extract_map(card)
+
+        LOGGER.info(
+            "Extracted %s -> online=%r map=%r map_url=%r",
+            default_name,
+            online,
+            map_name,
+            map_url,
+        )
 
         return ServerSnapshot(
             server_name=default_name,
