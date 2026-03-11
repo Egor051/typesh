@@ -2,11 +2,9 @@ from __future__ import annotations
 
 import logging
 import re
-from urllib.parse import urljoin
 
 import requests
 from bs4 import BeautifulSoup
-from bs4.element import Tag
 
 from .models import ServerSnapshot, WidgetSnapshot
 
@@ -59,17 +57,22 @@ class SqstatParser:
         return html
 
     def fetch_and_parse(self) -> WidgetSnapshot:
-        html = self.fetch_html()
-        return self.parse(html)
+        return self.parse(self.fetch_html())
 
     def parse(self, html: str) -> WidgetSnapshot:
         soup = BeautifulSoup(html, "html.parser")
-        text = soup.get_text("\n", strip=True)
+        text = self._compact_text(soup.get_text("\n", strip=True))
 
         LOGGER.info("Fetched HTML preview: %s", self._compact_text(html[:3000]))
 
-        raas_snapshot = self._extract_mode_snapshot(text, mode="RAAS/AAS")
-        spec_snapshot = self._extract_mode_snapshot(text, mode="SPEC")
+        raas_line = self._find_mode_line(text, "RAAS/AAS")
+        spec_line = self._find_mode_line(text, "SPEC")
+
+        LOGGER.info("Matched RAAS/AAS line: %s", raas_line or "<not found>")
+        LOGGER.info("Matched SPEC line: %s", spec_line or "<not found>")
+
+        raas_snapshot = self._build_snapshot("RAAS/AAS", raas_line)
+        spec_snapshot = self._build_snapshot("SPEC", spec_line)
 
         LOGGER.info(
             "Extracted RAAS/AAS -> online=%r map=%r map_url=%r",
@@ -89,31 +92,32 @@ class SqstatParser:
             spec=spec_snapshot,
         )
 
-    def _extract_mode_snapshot(self, page_text: str, mode: str) -> ServerSnapshot:
-        lines = [self._compact_text(line) for line in page_text.splitlines()]
-        lines = [line for line in lines if line]
+    def _find_mode_line(self, text: str, mode: str) -> str:
+        pattern = None
 
-        matched_line = ""
-        for line in lines:
-            upper = line.upper()
+        if mode == "RAAS/AAS":
+            pattern = re.compile(
+                r"([A-Za-z0-9\s#/_-]+?\bRAAS/AAS\b\s*#?\d*.*?\b\d{9,10}\b\s*-\s*\b\d{9,10}\b.*?(?:\b\d{1,3}\b.*?\b\d{1,3}\b))",
+                re.IGNORECASE,
+            )
+        elif mode == "SPEC":
+            pattern = re.compile(
+                r"([A-Za-z0-9\s#/_-]+?\bSPEC\b.*?\b\d{9,10}\b\s*-\s*\b\d{9,10}\b.*?(?:\b\d{1,3}\b.*?\b\d{1,3}\b))",
+                re.IGNORECASE,
+            )
 
-            if mode == "RAAS/AAS":
-                if "RAAS/AAS" in upper or re.search(r"\bRAAS\b", upper) or re.search(r"\bAAS\b", upper):
-                    matched_line = line
-                    break
-            elif mode == "SPEC":
-                if re.search(r"\bSPEC\b", upper):
-                    matched_line = line
-                    break
+        if pattern is None:
+            return ""
 
-        if not matched_line:
-            LOGGER.error("%s line was not found in page text", mode)
+        match = pattern.search(text)
+        return self._compact_text(match.group(1)) if match else ""
+
+    def _build_snapshot(self, mode: str, line: str) -> ServerSnapshot:
+        if not line:
             return ServerSnapshot(server_name=mode)
 
-        LOGGER.info("Matched %s line: %s", mode, matched_line[:700])
-
-        online = self._extract_online_from_line(matched_line, mode)
-        map_name = self._extract_map_from_line(matched_line, mode)
+        online = self._extract_online_from_line(line)
+        map_name = self._extract_map_from_line(line, mode)
 
         return ServerSnapshot(
             server_name=mode,
@@ -122,40 +126,32 @@ class SqstatParser:
             map_image_url="",
         )
 
-    def _extract_online_from_line(self, line: str, mode: str) -> str:
-        numbers = [int(value) for value in re.findall(r"\b\d{1,3}\b", line)]
+    def _extract_online_from_line(self, line: str) -> str:
+        ts_matches = re.findall(r"\b\d{9,10}\b", line)
+        cleaned = line
+        for ts in ts_matches:
+            cleaned = cleaned.replace(ts, " ")
 
-        if not numbers:
+        nums = [int(x) for x in re.findall(r"\b\d{1,3}\b", cleaned)]
+        nums = [n for n in nums if 0 <= n <= 127]
+
+        if not nums:
             return ""
 
-        if mode == "RAAS/AAS":
-            filtered = [n for n in numbers if 0 <= n <= 127]
-            if filtered:
-                return str(max(filtered))
-            return str(numbers[0])
-
-        if mode == "SPEC":
-            filtered = [n for n in numbers if 0 <= n <= 127]
-            if filtered:
-                return str(max(filtered))
-            return str(numbers[0])
-
-        return ""
+        return str(max(nums))
 
     def _extract_map_from_line(self, line: str, mode: str) -> str:
         working = line
 
         if mode == "RAAS/AAS":
-            working = re.split(r"\bRAAS/AAS\b|\bRAAS\b|\bAAS\b", working, maxsplit=1, flags=re.IGNORECASE)[0]
-        elif mode == "SPEC":
+            working = re.split(r"\bRAAS/AAS\b", working, maxsplit=1, flags=re.IGNORECASE)[0]
+        else:
             working = re.split(r"\bSPEC\b", working, maxsplit=1, flags=re.IGNORECASE)[0]
 
         working = self._compact_text(working)
-
         working = re.sub(r"^(Игры|Games)\s+", "", working, flags=re.IGNORECASE)
-        working = re.sub(r"\b\d+\b.*$", "", working).strip()
 
-        return working
+        return working.strip()
 
     @staticmethod
     def _compact_text(value: str) -> str:
