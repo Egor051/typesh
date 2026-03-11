@@ -1,7 +1,7 @@
 # Discord-бот виджета Breaking Proxy
 
 Лёгкий Python-бот, который периодически читает виджет с `breaking.proxy.sqstat.ru`,
-извлекает данные по двум карточкам (`RAAS/AAS` и `SPEC`) и обновляет **одно** сообщение
+извлекает данные по двум карточкам (`RAAS/AAS` и `SPEC OPS`) и обновляет **одно** сообщение
 в Discord-канале.
 
 ## Что делает бот
@@ -65,7 +65,7 @@
 |---|---:|---|---|
 | `DISCORD_TOKEN` | ✅ | — | токен Discord-бота |
 | `CHANNEL_ID` | ✅ | — | ID канала для виджета |
-| `UPDATE_INTERVAL_SECONDS` | ❌ | `180` | интервал обновления, сек |
+| `UPDATE_INTERVAL_SECONDS` | ❌ | `180` | интервал обновления, сек (минимум `5`) |
 | `BASE_URL` | ❌ | `https://breaking.proxy.sqstat.ru` | URL источника данных |
 | `STATE_FILE` | ❌ | `state.json` | путь к JSON-файлу состояния |
 | `LOG_LEVEL` | ❌ | `INFO` | уровень логирования |

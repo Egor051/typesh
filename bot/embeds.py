@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import discord
 
@@ -19,8 +20,17 @@ def _server_embed(server: ServerSnapshot, color: int) -> discord.Embed:
 
 
 def build_embeds(snapshot: WidgetSnapshot) -> list[discord.Embed]:
-    now = datetime.now(timezone.utc)
-    footer = f"Последнее успешное обновление: {now.strftime('%Y-%m-%d %H:%M:%S UTC')}"
+    msk = ZoneInfo("Europe/Moscow")
+    last_successful_request = snapshot.last_successful_request_at or datetime.now(msk)
+    if last_successful_request.tzinfo is None:
+        last_successful_request = last_successful_request.replace(tzinfo=msk)
+    else:
+        last_successful_request = last_successful_request.astimezone(msk)
+
+    footer = (
+        "Последнее успешное обращение к сайту: "
+        f"{last_successful_request.strftime('%Y-%m-%d %H:%M:%S МСК')}"
+    )
 
     raas_embed = _server_embed(snapshot.raas_aas, color=0x2B90D9)
     spec_embed = _server_embed(snapshot.spec, color=0x9B59B6)

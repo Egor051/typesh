@@ -120,7 +120,7 @@ class SqstatParser:
         LOGGER.info("Matched SPEC card: %s", "yes" if spec_card else "no")
 
         raas_snapshot = self._snapshot_from_card("RAAS/AAS", raas_card)
-        spec_snapshot = self._snapshot_from_card("SPEC", spec_card)
+        spec_snapshot = self._snapshot_from_card("SPEC OPS", spec_card)
 
         LOGGER.info(
             "Extracted RAAS/AAS -> online=%r map=%r",
@@ -128,7 +128,7 @@ class SqstatParser:
             raas_snapshot.map_name,
         )
         LOGGER.info(
-            "Extracted SPEC -> online=%r map=%r",
+            "Extracted SPEC OPS -> online=%r map=%r",
             spec_snapshot.online,
             spec_snapshot.map_name,
         )

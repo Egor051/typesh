@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import discord
 
@@ -30,6 +32,7 @@ class WidgetUpdater:
 
         self.message_id: int | None = None
         self.last_snapshot: WidgetSnapshot | None = None
+        self.msk = ZoneInfo("Europe/Moscow")
 
     async def initialize(self) -> None:
         state = self.state_store.load()
@@ -48,7 +51,7 @@ class WidgetUpdater:
         self.message_id = message.id
 
         if self.last_snapshot and not self.last_snapshot.is_empty():
-            await message.edit(content="🎯 Состояние серверов Breaking", embeds=build_embeds(self.last_snapshot))
+            await message.edit(content="🎯 Состояние Серверов BSS", embeds=build_embeds(self.last_snapshot))
 
         self._persist_state()
 
@@ -67,22 +70,30 @@ class WidgetUpdater:
             LOGGER.exception("Failed to fetch/parse HTML")
             return
 
+        has_same_data = bool(
+            self.last_snapshot
+            and snapshot.raas_aas.to_dict() == self.last_snapshot.raas_aas.to_dict()
+            and snapshot.spec.to_dict() == self.last_snapshot.spec.to_dict()
+        )
+
+        snapshot.last_successful_request_at = datetime.now(self.msk)
+
         if snapshot.is_empty() and self.last_snapshot is not None:
             LOGGER.warning("Received empty snapshot, preserving last successful state")
             return
 
-        if self.last_snapshot and snapshot.to_dict() == self.last_snapshot.to_dict():
-            LOGGER.info("Snapshot unchanged, skipping Discord edit")
-            return
-
         channel = await self._get_text_channel()
         message = await self._get_or_create_message(channel)
-        await message.edit(content="🎯 Состояние серверов Breaking", embeds=build_embeds(snapshot))
+        await message.edit(content="🎯 Состояние Серверов BSS", embeds=build_embeds(snapshot))
+
+        if has_same_data:
+            LOGGER.info("Snapshot data unchanged, updated last successful request time")
+        else:
+            LOGGER.info("Widget message updated successfully")
 
         self.last_snapshot = snapshot
         self.message_id = message.id
         self._persist_state()
-        LOGGER.info("Widget message updated successfully")
 
     async def _get_text_channel(self) -> discord.TextChannel:
         channel = self.client.get_channel(self.channel_id)

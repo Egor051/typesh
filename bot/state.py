@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -49,7 +50,16 @@ def snapshot_from_state(data: dict[str, Any]) -> WidgetSnapshot | None:
             map_image_url=raw.get("map_image_url") or "",
         )
 
+    last_successful_request_at = None
+    raw_last_request_at = widget_data.get("last_successful_request_at")
+    if isinstance(raw_last_request_at, str) and raw_last_request_at.strip():
+        try:
+            last_successful_request_at = datetime.fromisoformat(raw_last_request_at)
+        except ValueError:
+            LOGGER.warning("Invalid last_successful_request_at in state: %r", raw_last_request_at)
+
     return WidgetSnapshot(
         raas_aas=_server("raas_aas", "RAAS/AAS"),
-        spec=_server("spec", "SPEC"),
+        spec=_server("spec", "SPEC OPS"),
+        last_successful_request_at=last_successful_request_at,
     )
