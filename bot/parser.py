@@ -103,34 +103,24 @@ class SqstatParser:
             if has_current and has_map:
                 cards.append(card)
 
-        LOGGER.info("Found %s server cards", len(cards))
-        for idx, card in enumerate(cards, start=1):
-            LOGGER.info("Card %s preview: %s", idx, (card.get("text") or "")[:300])
+        LOGGER.info("Fetched %s eligible server cards", len(cards))
 
         return cards
 
     def _build_snapshot(self, cards: list[dict[str, str]]) -> WidgetSnapshot:
-        # По твоим скринам и логам:
-        # 1-я карточка = RAAS/AAS
-        # 2-я карточка = SPEC
         raas_card = cards[0] if len(cards) >= 1 else None
         spec_card = cards[1] if len(cards) >= 2 else None
-
-        LOGGER.info("Matched RAAS/AAS card: %s", "yes" if raas_card else "no")
-        LOGGER.info("Matched SPEC card: %s", "yes" if spec_card else "no")
 
         raas_snapshot = self._snapshot_from_card("RAAS/AAS", raas_card)
         spec_snapshot = self._snapshot_from_card("SPEC OPS", spec_card)
 
         LOGGER.info(
-            "Extracted RAAS/AAS -> online=%r map=%r",
-            raas_snapshot.online,
-            raas_snapshot.map_name,
-        )
-        LOGGER.info(
-            "Extracted SPEC OPS -> online=%r map=%r",
-            spec_snapshot.online,
-            spec_snapshot.map_name,
+            "Snapshot parsed | cards=%s | RAAS/AAS: online=%s map=%s | SPEC OPS: online=%s map=%s",
+            len(cards),
+            raas_snapshot.online or "-",
+            raas_snapshot.map_name or "-",
+            spec_snapshot.online or "-",
+            spec_snapshot.map_name or "-",
         )
 
         return WidgetSnapshot(
@@ -176,30 +166,26 @@ class SqstatParser:
         for pattern in patterns:
             m = re.search(pattern, html, re.IGNORECASE)
             if m:
-                value = m.group(1)
-                LOGGER.info("%s online from regex %s => %s", server_name, pattern, value)
-                return value
+                return m.group(1)
 
         # fallback: берем первое небольшое число из текста
         nums = re.findall(r"\b\d{1,3}\b", text)
         for num in nums:
             if num.isdigit():
-                LOGGER.info("%s online from text fallback => %s", server_name, num)
+                LOGGER.debug("%s online extracted from fallback text", server_name)
                 return num
 
-        LOGGER.warning("%s online not found", server_name)
+        LOGGER.warning("%s: failed to detect online", server_name)
         return ""
 
     def _extract_map_name(self, card: dict[str, str], server_name: str) -> str:
         map_name = (card.get("map_name") or "").strip()
         if map_name:
-            LOGGER.info("%s map from attr => %s", server_name, map_name)
             return map_name
 
         map_src = (card.get("map_src") or "").strip()
         inferred = self._infer_map_name_from_src(map_src)
         if inferred:
-            LOGGER.info("%s map inferred from src => %s", server_name, inferred)
             return inferred
 
         html = card.get("html") or ""
@@ -211,10 +197,9 @@ class SqstatParser:
         if m:
             inferred = self._infer_map_name_from_src(m.group(1))
             if inferred:
-                LOGGER.info("%s map inferred from html => %s", server_name, inferred)
                 return inferred
 
-        LOGGER.warning("%s map not found", server_name)
+        LOGGER.warning("%s: failed to detect map", server_name)
         return ""
 
     def _infer_map_name_from_src(self, src: str) -> str:

@@ -15,7 +15,8 @@ from bot.widget_updater import WidgetUpdater
 def setup_logging(level: str) -> None:
     logging.basicConfig(
         level=getattr(logging, level, logging.INFO),
-        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+        format="%(asctime)s | %(levelname).1s | %(name)s | %(message)s",
+        datefmt="%H:%M:%S",
     )
 
 
