@@ -54,6 +54,7 @@ class WidgetUpdater:
             await message.edit(content="🎯 Состояние Серверов BSS", embeds=build_embeds(self.last_snapshot))
 
         self._persist_state()
+        LOGGER.info("Widget initialized | channel_id=%s | message_id=%s", self.channel_id, self.message_id)
 
     async def run_forever(self) -> None:
         while True:
@@ -79,7 +80,7 @@ class WidgetUpdater:
         snapshot.last_successful_request_at = datetime.now(self.msk)
 
         if snapshot.is_empty() and self.last_snapshot is not None:
-            LOGGER.warning("Received empty snapshot, preserving last successful state")
+            LOGGER.warning("Received empty snapshot, preserving previous widget state")
             return
 
         channel = await self._get_text_channel()
@@ -87,9 +88,9 @@ class WidgetUpdater:
         await message.edit(content="🎯 Состояние Серверов BSS", embeds=build_embeds(snapshot))
 
         if has_same_data:
-            LOGGER.info("Snapshot data unchanged, updated last successful request time")
+            LOGGER.info("Widget heartbeat: data unchanged")
         else:
-            LOGGER.info("Widget message updated successfully")
+            LOGGER.info("Widget updated: new server state published")
 
         self.last_snapshot = snapshot
         self.message_id = message.id
