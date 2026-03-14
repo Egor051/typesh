@@ -38,23 +38,34 @@
 
 ## Быстрый старт
 
-1. Создайте виртуальное окружение и установите зависимости:
+1. Создайте виртуальное окружение и активируйте его:
 
    ```bash
    python -m venv .venv
    source .venv/bin/activate
+   ```
+
+2. Установите Python-зависимости:
+
+   ```bash
    pip install -r requirements.txt
    ```
 
-2. Создайте `.env` на основе примера:
+3. Установите браузер для Playwright:
+
+   ```bash
+   python -m playwright install chromium
+   ```
+
+4. Создайте `.env` на основе примера:
 
    ```bash
    cp .env.example .env
    ```
 
-3. Заполните переменные окружения (минимум `DISCORD_TOKEN` и `CHANNEL_ID`).
+5. Заполните переменные окружения (минимум `DISCORD_TOKEN` и `CHANNEL_ID`).
 
-4. Запустите:
+6. Запустите:
 
    ```bash
    python main.py
@@ -107,8 +118,9 @@
 1. Поднимите окружение с Python 3.11+.
 2. Загрузите проект и добавьте `.env`.
 3. Установите зависимости: `pip install -r requirements.txt`.
-4. Запускайте `python main.py`.
-5. Убедитесь, что путь `STATE_FILE` доступен для записи.
+4. Установите браузер: `python -m playwright install chromium`.
+5. Запускайте `python main.py`.
+6. Убедитесь, что путь `STATE_FILE` доступен для записи.
 
 ## Лицензия
 

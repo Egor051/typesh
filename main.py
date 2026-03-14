@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 
 import discord
@@ -38,13 +39,31 @@ async def run_bot() -> None:
         update_interval_seconds=settings.update_interval_seconds,
     )
 
+    logger = logging.getLogger(__name__)
+    update_task: asyncio.Task[None] | None = None
+
     @client.event
     async def on_ready() -> None:
-        logging.getLogger(__name__).info("Logged in as %s", client.user)
-        await updater.initialize()
-        client.loop.create_task(updater.run_forever())
+        nonlocal update_task
 
-    await client.start(settings.discord_token)
+        logger.info("Logged in as %s", client.user)
+
+        if update_task is not None and not update_task.done():
+            logger.info("Widget loop already running; skipping duplicate start")
+            return
+
+        await updater.initialize()
+        update_task = asyncio.create_task(updater.run_forever(), name="widget-updater")
+
+    try:
+        await client.start(settings.discord_token)
+    finally:
+        if update_task is not None:
+            update_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await update_task
+
+        await parser.close()
 
 
 if __name__ == "__main__":
