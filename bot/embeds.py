@@ -7,6 +7,8 @@ import discord
 
 from .models import ServerSnapshot, WidgetSnapshot
 
+MSK = ZoneInfo("Europe/Moscow")
+
 
 def _server_embed(server: ServerSnapshot, color: int) -> discord.Embed:
     embed = discord.Embed(title=server.server_name, color=color)
@@ -20,12 +22,11 @@ def _server_embed(server: ServerSnapshot, color: int) -> discord.Embed:
 
 
 def build_embeds(snapshot: WidgetSnapshot) -> list[discord.Embed]:
-    msk = ZoneInfo("Europe/Moscow")
-    last_successful_request = snapshot.last_successful_request_at or datetime.now(msk)
+    last_successful_request = snapshot.last_successful_request_at or datetime.now(MSK)
     if last_successful_request.tzinfo is None:
-        last_successful_request = last_successful_request.replace(tzinfo=msk)
+        last_successful_request = last_successful_request.replace(tzinfo=MSK)
     else:
-        last_successful_request = last_successful_request.astimezone(msk)
+        last_successful_request = last_successful_request.astimezone(MSK)
 
     footer = (
         "Последнее успешное обращение к сайту: "

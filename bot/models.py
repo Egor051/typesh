@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
 
-@dataclass
+@dataclass(frozen=True)
 class ServerSnapshot:
     server_name: str
     online: str = ""
@@ -13,10 +13,23 @@ class ServerSnapshot:
     map_image_url: str = ""
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        return {
+            "server_name": self.server_name,
+            "online": self.online,
+            "map_name": self.map_name,
+            "map_image_url": self.map_image_url,
+        }
+
+    def content_key(self) -> tuple[str, str, str, str]:
+        return (
+            self.server_name,
+            self.online,
+            self.map_name,
+            self.map_image_url,
+        )
 
 
-@dataclass
+@dataclass(frozen=True)
 class WidgetSnapshot:
     raas_aas: ServerSnapshot
     spec: ServerSnapshot
@@ -33,12 +46,29 @@ class WidgetSnapshot:
             ),
         }
 
+    def same_content(self, other: "WidgetSnapshot | None") -> bool:
+        if other is None:
+            return False
+        return self.content_key() == other.content_key()
+
+    def content_key(self) -> tuple[tuple[str, str, str, str], tuple[str, str, str, str]]:
+        return (self.raas_aas.content_key(), self.spec.content_key())
+
+    def with_timestamp(self, timestamp: datetime | None) -> "WidgetSnapshot":
+        return WidgetSnapshot(
+            raas_aas=self.raas_aas,
+            spec=self.spec,
+            last_successful_request_at=timestamp,
+        )
+
     def is_empty(self) -> bool:
-        return not any([
-            self.raas_aas.online,
-            self.raas_aas.map_name,
-            self.raas_aas.map_image_url,
-            self.spec.online,
-            self.spec.map_name,
-            self.spec.map_image_url,
-        ])
+        return not any(
+            [
+                self.raas_aas.online,
+                self.raas_aas.map_name,
+                self.raas_aas.map_image_url,
+                self.spec.online,
+                self.spec.map_name,
+                self.spec.map_image_url,
+            ]
+        )

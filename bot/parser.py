@@ -3,11 +3,15 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+from time import perf_counter
 from urllib.parse import urljoin
 
 from playwright.async_api import (
     Browser,
+    BrowserContext,
+    Page,
     Playwright,
+    Route,
     TimeoutError as PlaywrightTimeoutError,
     async_playwright,
 )
@@ -15,6 +19,21 @@ from playwright.async_api import (
 from .models import ServerSnapshot, WidgetSnapshot
 
 LOGGER = logging.getLogger(__name__)
+
+ONLINE_TEXT_PATTERNS = (
+    re.compile(r"(?:ОНЛАЙН|ONLINE|PLAYERS?)\D{0,10}(\d{1,3})\b", re.IGNORECASE),
+    re.compile(r"\b(\d{1,3})\s*/\s*\d{1,3}\b", re.IGNORECASE),
+)
+MAP_FILE_PATTERN = re.compile(r"\.(jpg|jpeg|png|webp)$", re.IGNORECASE)
+KNOWN_TRACKER_TOKENS = (
+    "google-analytics",
+    "googletagmanager",
+    "doubleclick",
+    "metrika",
+    "mc.yandex",
+    "facebook",
+    "hotjar",
+)
 
 
 class SqstatParser:
@@ -28,121 +47,218 @@ class SqstatParser:
         self.timeout_seconds = timeout_seconds
         self._playwright: Playwright | None = None
         self._browser: Browser | None = None
+        self._context: BrowserContext | None = None
+        self._page: Page | None = None
         self._browser_lock = asyncio.Lock()
 
     async def close(self) -> None:
         async with self._browser_lock:
+            page = self._page
+            context = self._context
             browser = self._browser
             playwright = self._playwright
+            self._page = None
+            self._context = None
             self._browser = None
             self._playwright = None
 
+        if page is not None and not page.is_closed():
+            await page.close()
+        if context is not None:
+            await context.close()
         if browser is not None:
             await browser.close()
-
         if playwright is not None:
             await playwright.stop()
 
     async def fetch_and_parse(self) -> WidgetSnapshot:
+        started_at = perf_counter()
         cards = await self._fetch_cards()
-        return self._build_snapshot(cards)
+        snapshot = self._build_snapshot(cards)
+        elapsed_ms = int((perf_counter() - started_at) * 1000)
+        LOGGER.info("Fetch/parse finished | cards=%s | elapsed_ms=%s", len(cards), elapsed_ms)
+        return snapshot
 
-    async def _ensure_browser(self) -> Browser:
+    async def _ensure_page(self) -> Page:
         async with self._browser_lock:
-            if self._browser is not None:
-                return self._browser
+            if self._page is not None and not self._page.is_closed():
+                return self._page
 
-            playwright = await async_playwright().start()
-            try:
-                browser = await playwright.chromium.launch(headless=True)
-            except Exception:
-                await playwright.stop()
-                raise
+            if self._browser is None:
+                playwright = await async_playwright().start()
+                try:
+                    browser = await playwright.chromium.launch(headless=True)
+                except Exception:
+                    await playwright.stop()
+                    raise
+                self._playwright = playwright
+                self._browser = browser
 
-            self._playwright = playwright
-            self._browser = browser
-            return browser
+            if self._context is None:
+                context = await self._browser.new_context(
+                    viewport={"width": 1024, "height": 768},
+                    service_workers="block",
+                )
+                await context.route("**/*", self._route_handler)
+                self._context = context
+
+            self._page = await self._context.new_page()
+            return self._page
+
+    async def _reset_page(self) -> None:
+        async with self._browser_lock:
+            page = self._page
+            self._page = None
+
+        if page is not None and not page.is_closed():
+            await page.close()
+
+    async def _route_handler(self, route: Route) -> None:
+        request = route.request
+        if request.resource_type in {"image", "media", "font"}:
+            await route.abort()
+            return
+
+        url = request.url.lower()
+        if any(token in url for token in KNOWN_TRACKER_TOKENS):
+            await route.abort()
+            return
+
+        await route.continue_()
 
     async def _fetch_cards(self) -> list[dict[str, str]]:
         timeout_ms = int(self.timeout_seconds * 1000)
-        browser = await self._ensure_browser()
-        page = await browser.new_page(viewport={"width": 1600, "height": 1200})
+        last_error: Exception | None = None
 
+        for attempt in range(2):
+            page = await self._ensure_page()
+            try:
+                return await self._read_cards_from_page(page, timeout_ms)
+            except Exception as exc:
+                last_error = exc
+                LOGGER.warning(
+                    "Page fetch attempt %s failed, recreating page | error=%s",
+                    attempt + 1,
+                    exc,
+                )
+                await self._reset_page()
+
+        if last_error is None:
+            raise RuntimeError("Failed to fetch cards for an unknown reason")
+        raise last_error
+
+    async def _read_cards_from_page(self, page: Page, timeout_ms: int) -> list[dict[str, str]]:
+        total_started = perf_counter()
+
+        goto_started = perf_counter()
+        await page.goto(self.base_url, wait_until="domcontentloaded", timeout=timeout_ms)
+        goto_ms = int((perf_counter() - goto_started) * 1000)
+
+        wait_started = perf_counter()
+        await page.wait_for_selector("div.block-box", timeout=timeout_ms)
         try:
-            await page.goto(self.base_url, wait_until="domcontentloaded", timeout=timeout_ms)
-
-            try:
-                await page.wait_for_load_state("networkidle", timeout=timeout_ms)
-            except PlaywrightTimeoutError:
-                LOGGER.warning("networkidle timeout; continuing with current DOM")
-
-            try:
-                await page.wait_for_selector("div.block-box", timeout=timeout_ms)
-            except PlaywrightTimeoutError:
-                LOGGER.warning("div.block-box not found before timeout")
-
-            await page.wait_for_timeout(2500)
-
-            raw_cards: list[dict[str, str]] = await page.locator("div.block-box").evaluate_all(
+            await page.wait_for_function(
                 """
-                (els) => els.map((el, idx) => {
-                    const text = (el.innerText || "")
-                        .replace(/\\s+/g, " ")
-                        .trim();
-
-                    const html = el.outerHTML || "";
-
-                    const mapImg =
-                        el.querySelector('img[data-type="map"]') ||
-                        el.querySelector('img[src*="/maps/"]') ||
-                        el.querySelector('img[data-src*="/maps/"]') ||
-                        el.querySelector('img[data-original*="/maps/"]');
-
-                    const mapName = (
-                        mapImg?.getAttribute("data-original-title") ||
-                        mapImg?.getAttribute("title") ||
-                        mapImg?.getAttribute("alt") ||
-                        mapImg?.getAttribute("data-title") ||
-                        mapImg?.getAttribute("data-name") ||
-                        ""
-                    ).trim();
-
-                    const mapSrc = (
-                        mapImg?.getAttribute("src") ||
-                        mapImg?.getAttribute("data-src") ||
-                        mapImg?.getAttribute("data-original") ||
-                        ""
-                    ).trim();
-
-                    return {
-                        index: String(idx),
-                        text,
-                        html,
-                        map_name: mapName,
-                        map_src: mapSrc,
-                    };
-                })
-                """
+                () => {
+                    const cards = Array.from(document.querySelectorAll('div.block-box'));
+                    if (cards.length < 2) {
+                        return false;
+                    }
+                    return cards.some((el) => /ТЕКУЩАЯ|CURRENT/i.test(el.innerText || ''));
+                }
+                """,
+                timeout=min(timeout_ms, 5000),
             )
-        finally:
-            await page.close()
+        except PlaywrightTimeoutError:
+            LOGGER.warning("Server cards were not fully ready before timeout; continuing with current DOM")
+        wait_ms = int((perf_counter() - wait_started) * 1000)
 
-        cards: list[dict[str, str]] = []
-        for card in raw_cards:
-            text_upper = (card.get("text") or "").upper()
-            html = card.get("html") or ""
-            has_current = "ТЕКУЩАЯ" in text_upper or "CURRENT" in text_upper
-            has_map = (
-                'data-type="map"' in html
-                or "/assets/img/maps/" in html
-                or bool(card.get("map_src"))
-            )
+        eval_started = perf_counter()
+        raw_cards: list[dict[str, str]] = await page.locator("div.block-box").evaluate_all(
+            r"""
+            (els) => {
+                const normalize = (value) => (value || '').replace(/\s+/g, ' ').trim();
+                const firstMatch = (text, patterns) => {
+                    for (const pattern of patterns) {
+                        const match = text.match(pattern);
+                        if (match && match[1]) {
+                            return String(match[1]).trim();
+                        }
+                    }
+                    return '';
+                };
 
-            if has_current and has_map:
-                cards.append(card)
+                return els
+                    .map((el, idx) => {
+                        const text = normalize(el.innerText);
+                        const html = el.innerHTML || '';
+                        const mapImg =
+                            el.querySelector('img[data-type="map"]') ||
+                            el.querySelector('img[src*="/maps/"]') ||
+                            el.querySelector('img[data-src*="/maps/"]') ||
+                            el.querySelector('img[data-original*="/maps/"]');
 
-        LOGGER.info("Fetched %s eligible server cards", len(cards))
-        return cards
+                        const mapName = normalize(
+                            mapImg?.getAttribute('data-original-title') ||
+                            mapImg?.getAttribute('title') ||
+                            mapImg?.getAttribute('alt') ||
+                            mapImg?.getAttribute('data-title') ||
+                            mapImg?.getAttribute('data-name') ||
+                            ''
+                        );
+
+                        const directMapSrc = normalize(
+                            mapImg?.getAttribute('src') ||
+                            mapImg?.getAttribute('data-src') ||
+                            mapImg?.getAttribute('data-original') ||
+                            ''
+                        );
+
+                        const htmlMapMatch = html.match(/\/assets\/img\/maps\/[a-z0-9_\-]+\.(?:jpg|jpeg|png|webp)/i);
+                        const mapSrc = directMapSrc || (htmlMapMatch ? htmlMapMatch[0] : '');
+
+                        const onlineHint = normalize(
+                            el.querySelector('input[type="hidden"][value]')?.getAttribute('value') ||
+                            el.querySelector('[aria-valuenow]')?.getAttribute('aria-valuenow') ||
+                            el.querySelector('[data-value]')?.getAttribute('data-value') ||
+                            el.querySelector('[data-percent]')?.getAttribute('data-percent') ||
+                            ''
+                        );
+
+                        const fallbackOnline = firstMatch(text, [
+                            /(?:ОНЛАЙН|ONLINE|PLAYERS?)\D{0,10}(\d{1,3})\b/i,
+                            /\b(\d{1,3})\s*\/\s*\d{1,3}\b/i,
+                        ]);
+
+                        const hasCurrent = /ТЕКУЩАЯ|CURRENT/i.test(text);
+                        const hasMap = Boolean(mapSrc);
+
+                        return {
+                            index: String(idx),
+                            text,
+                            online_hint: onlineHint || fallbackOnline,
+                            map_name: mapName,
+                            map_src: mapSrc,
+                            has_current: hasCurrent ? '1' : '0',
+                            has_map: hasMap ? '1' : '0',
+                        };
+                    })
+                    .filter((card) => card.has_current === '1' && card.has_map === '1');
+            }
+            """
+        )
+        eval_ms = int((perf_counter() - eval_started) * 1000)
+        total_ms = int((perf_counter() - total_started) * 1000)
+
+        LOGGER.info(
+            "Fetched %s eligible server cards | goto_ms=%s | wait_ms=%s | eval_ms=%s | total_ms=%s",
+            len(raw_cards),
+            goto_ms,
+            wait_ms,
+            eval_ms,
+            total_ms,
+        )
+        return raw_cards
 
     def _build_snapshot(self, cards: list[dict[str, str]]) -> WidgetSnapshot:
         raas_card = self._select_card(
@@ -200,7 +316,7 @@ class SqstatParser:
 
     @staticmethod
     def _card_search_blob(card: dict[str, str]) -> str:
-        return f"{card.get('text', '')} {card.get('html', '')}".upper()
+        return f"{card.get('text', '')}".upper()
 
     def _snapshot_from_card(
         self,
@@ -210,10 +326,10 @@ class SqstatParser:
         if not card:
             return ServerSnapshot(server_name=server_name)
 
-        html = card.get("html") or ""
         text = card.get("text") or ""
+        online_hint = card.get("online_hint") or ""
 
-        online = self._extract_online(html, text, server_name)
+        online = self._extract_online(text, online_hint, server_name)
         map_name = self._extract_map_name(card, server_name)
         map_image_url = self._extract_map_image_url(card)
 
@@ -224,33 +340,14 @@ class SqstatParser:
             map_image_url=map_image_url,
         )
 
-    def _extract_online(self, html: str, text: str, server_name: str) -> str:
-        html_patterns = [
-            r'type=["\']hidden["\'][^>]*value=["\'](\d{1,3})["\']',
-            r'aria-valuenow=["\'](\d{1,3})["\']',
-            r'data-value=["\'](\d{1,3})["\']',
-            r'data-percent=["\'](\d{1,3})["\']',
-            r'"online"\s*:\s*"?(?:\s)?(\d{1,3})"?',
-            r'"players"\s*:\s*"?(?:\s)?(\d{1,3})"?',
-            r'"value"\s*:\s*"?(?:\s)?(\d{1,3})"?',
-            r"'online'\s*:\s*'?(?:\s)?(\d{1,3})'?",
-            r"'players'\s*:\s*'?(?:\s)?(\d{1,3})'?",
-            r"'value'\s*:\s*'?(?:\s)?(\d{1,3})'?",
-        ]
-
-        for pattern in html_patterns:
-            match = re.search(pattern, html, re.IGNORECASE)
-            if match:
-                return match.group(1)
-
-        text_patterns = [
-            r"(?:ОНЛАЙН|ONLINE|PLAYERS?)\D{0,10}(\d{1,3})\b",
-            r"\b(\d{1,3})\s*/\s*\d{1,3}\b",
-        ]
+    def _extract_online(self, text: str, online_hint: str, server_name: str) -> str:
+        online_hint = online_hint.strip()
+        if online_hint.isdigit():
+            return online_hint
 
         normalized_text = re.sub(r"\s+", " ", text).strip()
-        for pattern in text_patterns:
-            match = re.search(pattern, normalized_text, re.IGNORECASE)
+        for pattern in ONLINE_TEXT_PATTERNS:
+            match = pattern.search(normalized_text)
             if match:
                 LOGGER.debug("%s online extracted from text fallback", server_name)
                 return match.group(1)
@@ -268,32 +365,11 @@ class SqstatParser:
         if inferred:
             return inferred
 
-        html = card.get("html") or ""
-        match = re.search(
-            r'/assets/img/maps/([a-z0-9_\-]+)\.(?:jpg|jpeg|png|webp)',
-            html,
-            re.IGNORECASE,
-        )
-        if match:
-            inferred = self._infer_map_name_from_src(match.group(1))
-            if inferred:
-                return inferred
-
         LOGGER.warning("%s: failed to detect map", server_name)
         return ""
 
     def _extract_map_image_url(self, card: dict[str, str]) -> str:
         map_src = (card.get("map_src") or "").strip()
-        if not map_src:
-            html = card.get("html") or ""
-            match = re.search(
-                r'(/assets/img/maps/[a-z0-9_\-]+\.(?:jpg|jpeg|png|webp))',
-                html,
-                re.IGNORECASE,
-            )
-            if match:
-                map_src = match.group(1)
-
         if not map_src:
             return ""
 
@@ -305,7 +381,7 @@ class SqstatParser:
 
         src = urljoin(f"{self.base_url}/", src)
         slug = src.rstrip("/").split("/")[-1]
-        slug = re.sub(r"\.(jpg|jpeg|png|webp)$", "", slug, flags=re.IGNORECASE)
+        slug = MAP_FILE_PATTERN.sub("", slug)
         slug = slug.replace("-", "_").strip("_")
 
         if not slug:

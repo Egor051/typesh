@@ -25,13 +25,17 @@ class StateStore:
             LOGGER.exception("Failed to load state file: %s", self.path)
             return {}
 
-    def save(self, state: dict[str, Any]) -> None:
+    def save(self, state: dict[str, Any]) -> bool:
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
-            with self.path.open("w", encoding="utf-8") as f:
-                json.dump(state, f, ensure_ascii=False, indent=2)
+            tmp_path = self.path.with_name(f"{self.path.name}.tmp")
+            with tmp_path.open("w", encoding="utf-8") as f:
+                json.dump(state, f, ensure_ascii=False, separators=(",", ":"))
+            tmp_path.replace(self.path)
+            return True
         except Exception:
             LOGGER.exception("Failed to save state file: %s", self.path)
+            return False
 
 
 def snapshot_from_state(data: dict[str, Any]) -> WidgetSnapshot | None:

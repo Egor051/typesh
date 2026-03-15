@@ -29,7 +29,10 @@ async def run_bot() -> None:
     intents = discord.Intents.default()
     client = discord.Client(intents=intents)
 
-    parser = SqstatParser(base_url=settings.base_url)
+    parser = SqstatParser(
+        base_url=settings.base_url,
+        timeout_seconds=settings.parser_timeout_seconds,
+    )
     state_store = StateStore(settings.state_file)
     updater = WidgetUpdater(
         client=client,
@@ -37,6 +40,8 @@ async def run_bot() -> None:
         state_store=state_store,
         channel_id=settings.channel_id,
         update_interval_seconds=settings.update_interval_seconds,
+        heartbeat_edit_interval_seconds=settings.heartbeat_edit_interval_seconds,
+        max_backoff_seconds=settings.max_backoff_seconds,
     )
 
     logger = logging.getLogger(__name__)
@@ -46,7 +51,13 @@ async def run_bot() -> None:
     async def on_ready() -> None:
         nonlocal update_task
 
-        logger.info("Logged in as %s", client.user)
+        logger.info(
+            "Logged in as %s | update_interval_seconds=%s | heartbeat_edit_interval_seconds=%s | max_backoff_seconds=%s",
+            client.user,
+            settings.update_interval_seconds,
+            settings.heartbeat_edit_interval_seconds,
+            settings.max_backoff_seconds,
+        )
 
         if update_task is not None and not update_task.done():
             logger.info("Widget loop already running; skipping duplicate start")
